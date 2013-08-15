@@ -27,17 +27,17 @@ function parseGroup(context: ParserContext): Expression {
   return value;
 }
 
-function parseBlock(context: ParserContext, inStruct: boolean): Block {
+function parseBlock(context: ParserContext): Block {
   var token: Token = context.current();
   if (!context.expect('{')) return null;
-  var statements: Statement[] = parseStatements(context, inStruct); if (statements === null) return null;
+  var statements: Statement[] = parseStatements(context); if (statements === null) return null;
   if (!context.expect('}')) return null;
   return new Block(context.spanSince(token.range), statements);
 }
 
 function parseBlockOrStatement(context: ParserContext): Block {
-  if (context.peek('{')) return parseBlock(context, false);
-  var statement: Statement = parseStatement(context, false);
+  if (context.peek('{')) return parseBlock(context);
+  var statement: Statement = parseStatement(context);
   if (statement === null) return null;
   return new Block(statement.range, [statement]);
 }
@@ -73,22 +73,22 @@ function parseArguments(context: ParserContext): VariableDeclaration[] {
   return args;
 }
 
-function parseStatements(context: ParserContext, inStruct: boolean): Statement[] {
+function parseStatements(context: ParserContext): Statement[] {
   var statements: Statement[] = [];
   while (!context.peek('}') && !context.peek('END')) {
-    var statement: Statement = parseStatement(context, inStruct); if (statement === null) return null;
+    var statement: Statement = parseStatement(context); if (statement === null) return null;
     statements.push(statement);
   }
   return statements;
 }
 
-function parseStatement(context: ParserContext, inStruct: boolean): Statement {
+function parseStatement(context: ParserContext): Statement {
   var range: TRange = context.current().range;
 
   // Struct statement
   if (context.eat('struct')) {
     var id: Identifier = parseIdentifier(context); if (id === null) return null;
-    var block: Block = parseBlock(context, true); if (block === null) return null;
+    var block: Block = parseBlock(context); if (block === null) return null;
     return new StructDeclaration(context.spanSince(range), id, block);
   }
 
@@ -109,10 +109,10 @@ function parseStatement(context: ParserContext, inStruct: boolean): Statement {
 
     // Function declaration
     var group: Token = context.current();
-    if (!inStruct && context.eat('(')) {
+    if (context.eat('(')) {
       var args: VariableDeclaration[] = parseArguments(context); if (args === null) return null;
       if (!context.expect(')')) return null;
-      var block: Block = parseBlock(context, false); if (block === null) return null;
+      var block: Block = parseBlock(context); if (block === null) return null;
       return new FunctionDeclaration(context.spanSince(range), id, type, args, block);
     }
 
@@ -268,7 +268,7 @@ pratt.parselet('new', Power.LOWEST).prefix = context => {
 function parse(log: Log, tokens: Token[]): Module {
   var context: ParserContext = new ParserContext(log, tokens);
   var range: TRange = context.current().range;
-  var statements: Statement[] = parseStatements(context, false); if (statements === null) return null;
+  var statements: Statement[] = parseStatements(context); if (statements === null) return null;
   if (!context.expect('END')) return null;
   range = context.spanSince(range);
   return new Module(range, new Block(range, statements));
