@@ -1,0 +1,7 @@
+{
+  "name": "bitscript",
+  "version": "0.1.0",
+  "devDependencies": {
+    "source-map-support": "*"
+  }
+}

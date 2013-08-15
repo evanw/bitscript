@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>Compiler Debugger</title>
+    <style>
+
+body {
+  background: #222;
+  margin: 20px;
+  color: #FFF;
+}
+
+h2 {
+  margin: 50px;
+  color: #555;
+  font: bold 25px 'Helvetica Neue', Helvetica, sans-serif;
+  text-shadow: 0 1px 3px #000;
+}
+
+small {
+  font-size: 50%;
+  font-style: italic;
+  font-weight: normal;
+}
+
+.textarea {
+  position: absolute;
+  top: 100px;
+  left: 50px;
+  right: 66px; /* 50px + 16px for textarea padding */
+  bottom: 66px; /* 50px + 16px for textarea padding */
+}
+
+textarea {
+  width: 100%;
+  height: 100%;
+  background: #111;
+  color: #FFF;
+  font: 12px/16px 'Bitstream Vera Sans Mono', 'DejaVu Sans Mono', Monaco, monospace;
+  border: none;
+  padding: 8px;
+  resize: none;
+  box-shadow: 0 0 4px #333, inset 0 1px 6px #000, inset 0 5px 20px #070707;
+  text-shadow: 0 1px 3px #000;
+}
+
+textarea:focus {
+  outline: none;
+}
+
+#left {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 50%;
+  bottom: 0;
+}
+
+#left .textarea {
+  right: 41px; /* 25px + 16px for textarea padding */
+}
+
+#right {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 50%;
+  bottom: 0;
+}
+
+#right .textarea {
+  left: 25px;
+}
+
+#right h2 {
+  margin-left: 25px;
+}
+
+    </style>
+  </head>
+  <body>
+    <div id="left">
+      <h2>Input</h2>
+      <div class="textarea"><textarea id="input"></textarea></div>
+    </div>
+    <div id="right">
+      <h2>Output</h2>
+      <div class="textarea"><textarea id="output" readonly></textarea></div>
+    </div>
+
+    <script src="node_modules/source-map-support/source-map-support.browser.js"></script>
+    <script src="compiled.js"></script>
+    <script>
+
+function printToken(token, indent) {
+  return indent +
+    token.kind +
+    ' ' + JSON.stringify(token.text) +
+    (token.children ? token.children.map(function(token) {
+      return '\n' + printToken(token, indent + '  ');
+    }).join('') : '');
+}
+
+function filter(key, value) {
+  if (value instanceof Type) {
+    return;
+  }
+  if (key === 'intrinsic') {
+    for (var name in Intrinsics) {
+      if (value === Intrinsics[name]) {
+        return name;
+      }
+    }
+  }
+  if (key !== 'range' &&
+      key !== 'symbol' &&
+      key !== 'scope' &&
+      key !== 'uniqueID' &&
+      key !== 'computedType') {
+    if (value instanceof AST) {
+      var obj = { kind: value.constructor.name };
+      for (var k in value) {
+        if (value.hasOwnProperty(k)) {
+          obj[k] = value[k];
+        }
+      }
+      return obj;
+    }
+    return value;
+  }
+}
+
+function changed() {
+  if (input.value === old) return;
+  old = input.value;
+  try {
+    var compiler = new Compiler(old);
+    output.style.color = '#FFF';
+    output.value = []
+      .concat(compiler.log.diagnostics)
+      .concat(compiler.module ? JSON.stringify(compiler.module, filter, 2) + '\n' : [])
+      .concat(compiler.tokens ? compiler.tokens.map(function(token) { return printToken(token, ''); }) : [])
+      .join('\n');
+  } catch (e) {
+    output.style.color = '#F00';
+    output.value = e.stack || e;
+  }
+}
+
+var old = null;
+input.oninput = input.onkeydown = input.onkeyup = changed;
+input.focus();
+changed();
+
+window.onfocus = function() {
+  input.focus();
+};
+
+    </script>
+  </body>
+</html>
