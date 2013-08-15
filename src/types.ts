@@ -92,4 +92,8 @@ class WrappedType {
       this.innerType.asString()
     );
   }
+
+  wrapWith(flag: number): WrappedType {
+    return new WrappedType(this.innerType, this.modifiers | flag);
+  }
 }

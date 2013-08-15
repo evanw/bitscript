@@ -1,3 +1,24 @@
+// The same operator precedence as C
+class Power {
+  static LOWEST: number = 0;
+  static COMMA: number = 1;
+  static ASSIGN: number = 2;
+  static TERNARY: number = 3;
+  static OR: number = 4;
+  static AND: number = 5;
+  static BITOR: number = 6;
+  static BITXOR: number = 7;
+  static BITAND: number = 8;
+  static EQ_NEQ: number = 9;
+  static COMPARE: number = 10;
+  static SHIFT: number = 11;
+  static ADD_SUB: number = 12;
+  static MUL_DIV: number = 13;
+  static UNARY: number = 14;
+  static CALL: number = 15;
+  static MEMBER: number = 16;
+}
+
 function parseGroup(context: ParserContext): Expression {
   var token: Token = context.current();
   if (!context.expect('(')) return null;
@@ -27,7 +48,18 @@ function parseIdentifier(context: ParserContext): Identifier {
 }
 
 function parseType(context: ParserContext): Expression {
-  return pratt.parse(context, Power.MEMBER - 1);
+  // Parse modifiers
+  var modifiers: number = 0;
+  for (;;) {
+    var token: Token = context.current();
+    if (context.eat('owned')) modifiers |= Modifier.OWNED;
+    else if (context.eat('shared')) modifiers |= Modifier.SHARED;
+    else if (context.eat('nullable')) modifiers |= Modifier.NULLABLE;
+    else break;
+  }
+
+  var value: Expression = pratt.parse(context, Power.MEMBER - 1); if (value === null) return null;
+  return modifiers !== 0 ? new ModifierExpression(value.range, value, modifiers) : value;
 }
 
 function parseArguments(context: ParserContext): VariableDeclaration[] {
@@ -36,7 +68,7 @@ function parseArguments(context: ParserContext): VariableDeclaration[] {
     if (args.length > 0 && !context.expect(',')) return null;
     var type: Expression = parseType(context); if (type === null) return null;
     var id: Identifier = parseIdentifier(context); if (id === null) return null;
-    args.push(new VariableDeclaration(spanRange(type.range, id.range), id, 0, type, null));
+    args.push(new VariableDeclaration(spanRange(type.range, id.range), id, type, null));
   }
   return args;
 }
@@ -54,33 +86,21 @@ function parseStatement(context: ParserContext, inStruct: boolean): Statement {
   var range: TRange = context.current().range;
 
   // Struct statement
-  if (!inStruct && context.eat('struct')) {
+  if (context.eat('struct')) {
     var id: Identifier = parseIdentifier(context); if (id === null) return null;
     var block: Block = parseBlock(context, true); if (block === null) return null;
-    return new StructDeclaration(context.spanSince(range), id, modifiers, block);
-  }
-
-  // TODO: MOVE THESE TO parseType() because they must work for arguments too
-  // Parse modifiers
-  var modifiers: number = 0;
-  for (;;) {
-    var token: Token = context.current();
-    if (context.eat('owned')) modifiers |= Modifier.OWNED;
-    else if (context.eat('shared')) modifiers |= Modifier.SHARED;
-    else if (context.eat('nullable')) modifiers |= Modifier.NULLABLE;
-    else break;
+    return new StructDeclaration(context.spanSince(range), id, block);
   }
 
   // Disambiguate identifiers used in expressions from identifiers used
   // as types in symbol declarations by starting to parse a type and
   // switching over to parsing an expression if it doesn't work out
-  if (inStruct || modifiers !== 0 || context.peek('IDENTIFIER')) {
-    if (!context.peek('IDENTIFIER')) {
-      context.expect('IDENTIFIER');
-      return null;
-    }
+  if (context.peek('IDENTIFIER') ||
+      context.peek('owned') ||
+      context.peek('shared') ||
+      context.peek('nullable')) {
     var type: Expression = parseType(context); if (type === null) return null;
-    if (!inStruct && modifiers === 0 && !context.peek('IDENTIFIER')) {
+    if (!context.peek('IDENTIFIER')) {
       var value: Expression = pratt.resume(context, Power.LOWEST, type); if (value === null) return null;
       if (!context.expect(';')) return null;
       return new ExpressionStatement(context.spanSince(range), value);
@@ -93,14 +113,14 @@ function parseStatement(context: ParserContext, inStruct: boolean): Statement {
       var args: VariableDeclaration[] = parseArguments(context); if (args === null) return null;
       if (!context.expect(')')) return null;
       var block: Block = parseBlock(context, false); if (block === null) return null;
-      return new FunctionDeclaration(context.spanSince(range), id, modifiers, type, args, block);
+      return new FunctionDeclaration(context.spanSince(range), id, type, args, block);
     }
 
     // Variable declaration
     var value: Expression = null;
     if (context.eat('=')) value = pratt.parse(context, Power.LOWEST);
     if (!context.expect(';')) return null;
-    return new VariableDeclaration(context.spanSince(range), id, modifiers, type, value);
+    return new VariableDeclaration(context.spanSince(range), id, type, value);
   }
 
   // If statement

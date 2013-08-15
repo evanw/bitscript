@@ -32,12 +32,25 @@ class Initializer implements DeclarationVisitor<WrappedType> {
 
   visitFunctionDeclaration(node: FunctionDeclaration): WrappedType {
     this.resolver.resolveAsType(node.result);
+
+    // Create the function scope
+    node.block.scope = new Scope(this.resolver.context.scope);
+
+    // Define the arguments in the function scope
+    this.resolver.pushContext(this.resolver.context.cloneWithScope(node.block.scope));
+    var argTypes: WrappedType[] = node.args.map(n => {
+      this.resolver.define(n);
+      this.resolver.ensureDeclarationIsInitialized(n);
+      return n.symbol.type;
+    }, this);
+    this.resolver.popContext();
+
     return SpecialType.ERROR.wrap(0);
   }
 
   visitVariableDeclaration(node: VariableDeclaration): WrappedType {
     this.resolver.resolveAsType(node.type);
-    return node.type.computedType.innerType.wrap(node.modifiers | Modifier.INSTANCE);
+    return node.type.computedType.wrapWith(Modifier.INSTANCE);
   }
 }
 
@@ -196,9 +209,9 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
       this.isInitialized[node.uniqueID] = true;
 
       // Define all declarations that are direct children of this node
-      node.statements.forEach(s => {
-        if (s instanceof Declaration) {
-          this.define(<Declaration>s);
+      node.statements.forEach(n => {
+        if (n instanceof Declaration) {
+          this.define(<Declaration>n);
         }
       });
     }
@@ -315,6 +328,14 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
 
     if (!node.type.computedType.isError()) {
       node.computedType = node.type.computedType.innerType.wrap(Modifier.INSTANCE | Modifier.OWNED);
+    }
+  }
+
+  visitModifierExpression(node: ModifierExpression) {
+    this.resolveAsType(node.type);
+
+    if (!node.type.computedType.isError()) {
+      node.computedType = node.type.computedType.wrapWith(node.modifiers);
     }
   }
 }

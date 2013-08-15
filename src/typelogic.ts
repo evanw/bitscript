@@ -4,16 +4,24 @@ class TypeLogic {
     return false;
   }
 
-  static canImplicitlyConvert(from: WrappedType, to: WrappedType): boolean {
+  static checkImplicitlyConversionTypes(from: WrappedType, to: WrappedType): boolean {
     var f: Type = from.innerType;
     var t: Type = to.innerType;
-    return (
-      TypeLogic.equal(f, t) ||
-      f === SpecialType.INT && t === SpecialType.DOUBLE
-    ) && (
-      from.isOwned() && (to.isOwned() || to.isShared()) ||
-      from.isShared() && to.isShared() ||
-      !from.isOwned() && !from.isShared() && !to.isOwned() && !to.isShared()
-    );
+    if (f === SpecialType.INT && t === SpecialType.DOUBLE) return true;
+    if (f === SpecialType.NULL && to.isNullable()) return true;
+    return TypeLogic.equal(f, t);
+  }
+
+  static checkImplicitlyConversionModifiers(from: WrappedType, to: WrappedType): boolean {
+    if (from.isNullable() && !to.isNullable()) return false;
+    if (from.isOwned() && (to.isOwned() || to.isShared())) return true;
+    if (from.isShared() && to.isShared()) return true;
+    if (!from.isOwned() && !from.isShared() && !to.isOwned() && !to.isShared()) return true;
+    return false;
+  }
+
+  static canImplicitlyConvert(from: WrappedType, to: WrappedType): boolean {
+    return TypeLogic.checkImplicitlyConversionTypes(from, to) &&
+           TypeLogic.checkImplicitlyConversionModifiers(from, to);
   }
 }
