@@ -48,3 +48,7 @@ function semanticErrorUnknownSymbol(log: Log, range: TRange, name: string) {
 function semanticErrorUnexpectedExpression(log: Log, range: TRange, type: WrappedType) {
   log.error(range, 'unexpected ' + type.asString());
 }
+
+function semanticErrorModifierConflict(log: Log, range: TRange, a: string, b: string) {
+  log.error(range, 'cannot use both ' + a + ' and ' + b);
+}

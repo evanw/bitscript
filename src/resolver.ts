@@ -325,17 +325,25 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
 
   visitNewExpression(node: NewExpression) {
     this.resolveAsType(node.type);
-
-    if (!node.type.computedType.isError()) {
-      node.computedType = node.type.computedType.innerType.wrap(Modifier.INSTANCE | Modifier.OWNED);
+    if (node.type.computedType.isError()) {
+      return;
     }
+
+    node.computedType = node.type.computedType.innerType.wrap(Modifier.INSTANCE | Modifier.OWNED);
   }
 
   visitModifierExpression(node: ModifierExpression) {
     this.resolveAsType(node.type);
-
-    if (!node.type.computedType.isError()) {
-      node.computedType = node.type.computedType.wrapWith(node.modifiers);
+    if (node.type.computedType.isError()) {
+      return;
     }
+
+    var both: number = Modifier.OWNED | Modifier.SHARED;
+    if ((node.modifiers & both) === both) {
+      semanticErrorModifierConflict(this.log, node.range, 'owned', 'shared');
+      return;
+    }
+
+    node.computedType = node.type.computedType.wrapWith(node.modifiers);
   }
 }
