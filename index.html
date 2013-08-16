@@ -90,6 +90,7 @@ textarea:focus {
     </div>
 
     <script src="node_modules/source-map-support/source-map-support.browser.js"></script>
+    <script src="escodegen.browser.js"></script>
     <script src="compiled.js"></script>
     <script>
 
@@ -139,6 +140,7 @@ function changed() {
     output.style.color = '#FFF';
     output.value = []
       .concat(compiler.log.diagnostics)
+      .concat(!compiler.log.hasErrors ? OutputJS.generate(compiler.module) + '\n' : [])
       .concat(compiler.module ? JSON.stringify(compiler.module, filter, 2) + '\n' : [])
       .concat(compiler.tokens ? compiler.tokens.map(function(token) { return printToken(token, ''); }) : [])
       .join('\n');

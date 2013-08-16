@@ -11,7 +11,8 @@ SOURCES= \
 	src/grammar.ts \
 	src/typelogic.ts \
 	src/resolver.ts \
-	src/compiler.ts
+	src/compiler.ts \
+	src/output.js.ts
 
 TESTS= \
 	tests/common.ts \
