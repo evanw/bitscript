@@ -1,16 +1,42 @@
+class ResolverFlag {
+  static IN_LOOP: number = 1;
+  static IN_STRUCT: number = 2;
+  static IN_FUNCTION: number = 4;
+}
+
 class ResolverContext {
   constructor(
-    public scope: Scope) {
+    public scope: Scope,
+    public flags: number) {
+  }
+
+  inLoop(): boolean {
+    return (this.flags & ResolverFlag.IN_LOOP) !== 0;
+  }
+
+  inStruct(): boolean {
+    return (this.flags & ResolverFlag.IN_STRUCT) !== 0;
+  }
+
+  inFunction(): boolean {
+    return (this.flags & ResolverFlag.IN_FUNCTION) !== 0;
   }
 
   clone(): ResolverContext {
     return new ResolverContext(
-      this.scope);
+      this.scope,
+      this.flags);
   }
 
   cloneWithScope(scope: Scope) {
     var clone = this.clone();
     clone.scope = scope;
+    return clone;
+  }
+
+  cloneWithFlag(flag: number) {
+    var clone = this.clone();
+    clone.flags |= flag;
     return clone;
   }
 }
@@ -56,7 +82,7 @@ class Initializer implements DeclarationVisitor<WrappedType> {
 
 class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, ExpressionVisitor<void> {
   stack: ResolverContext[] = [];
-  context: ResolverContext = new ResolverContext(Resolver.createGlobalScope());
+  context: ResolverContext = new ResolverContext(Resolver.createGlobalScope(), 0);
   isInitialized: { [uniqueID: number]: boolean } = {};
   definitionContext: { [uniqueID: number]: ResolverContext } = {};
   initializer: Initializer = new Initializer(this);
@@ -218,10 +244,20 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
   }
 
   visitExpressionStatement(node: ExpressionStatement) {
+    if (!this.context.inFunction()) {
+      semanticErrorUnexpectedStatement(this.log, node.range, 'expression statement');
+      return;
+    }
+
     this.resolveAsExpression(node.value);
   }
 
   visitIfStatement(node: IfStatement) {
+    if (!this.context.inFunction()) {
+      semanticErrorUnexpectedStatement(this.log, node.range, 'if statement');
+      return;
+    }
+
     this.resolveAsExpression(node.test);
     this.visitBlock(node.thenBlock);
     if (node.elseBlock !== null) {
@@ -230,20 +266,40 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
   }
 
   visitWhileStatement(node: WhileStatement) {
+    if (!this.context.inFunction()) {
+      semanticErrorUnexpectedStatement(this.log, node.range, 'while statement');
+      return;
+    }
+
     this.resolveAsExpression(node.test);
+    this.pushContext(this.context.cloneWithFlag(ResolverFlag.IN_LOOP));
     this.visitBlock(node.block);
+    this.popContext();
   }
 
   visitReturnStatement(node: ReturnStatement) {
+    if (!this.context.inFunction()) {
+      semanticErrorUnexpectedStatement(this.log, node.range, 'return statement');
+      return;
+    }
+
     if (node.value !== null) {
       this.resolveAsExpression(node.value);
     }
   }
 
   visitBreakStatement(node: BreakStatement) {
+    if (!this.context.inLoop()) {
+      semanticErrorUnexpectedStatement(this.log, node.range, 'break statement');
+      return;
+    }
   }
 
   visitContinueStatement(node: ContinueStatement) {
+    if (!this.context.inLoop()) {
+      semanticErrorUnexpectedStatement(this.log, node.range, 'continue statement');
+      return;
+    }
   }
 
   visitDeclaration(node: Declaration) {
@@ -251,15 +307,29 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
   }
 
   visitStructDeclaration(node: StructDeclaration) {
+    if (this.context.inStruct() || this.context.inFunction()) {
+      semanticErrorUnexpectedStatement(this.log, node.range, 'struct declaration');
+      return;
+    }
+
     this.ensureDeclarationIsInitialized(node);
+    this.pushContext(this.context.cloneWithFlag(ResolverFlag.IN_STRUCT));
     this.visitBlock(node.block);
+    this.popContext();
   }
 
   visitFunctionDeclaration(node: FunctionDeclaration) {
+    if (this.context.inStruct() || this.context.inFunction()) {
+      semanticErrorUnexpectedStatement(this.log, node.range, 'function declaration');
+      return;
+    }
+
     this.ensureDeclarationIsInitialized(node);
     this.resolveAsType(node.result);
     node.args.forEach(n => n.acceptDeclarationVisitor(this));
+    this.pushContext(this.context.cloneWithFlag(ResolverFlag.IN_FUNCTION));
     this.visitBlock(node.block);
+    this.popContext();
   }
 
   visitVariableDeclaration(node: VariableDeclaration) {

@@ -15,6 +15,7 @@ SOURCES= \
 
 TESTS= \
 	tests/common.ts \
+	tests/statements.ts \
 	tests/modifiers.ts
 
 build:

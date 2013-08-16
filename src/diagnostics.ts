@@ -56,3 +56,7 @@ function semanticErrorUnexpectedExpression(log: Log, range: TRange, type: Wrappe
 function semanticErrorModifierConflict(log: Log, range: TRange, a: string, b: string) {
   log.error(range, 'cannot use both ' + a + ' and ' + b);
 }
+
+function semanticErrorUnexpectedStatement(log: Log, range: TRange, text: string) {
+  log.error(range, 'cannot use ' + text + ' here');
+}
