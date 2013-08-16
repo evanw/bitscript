@@ -8,16 +8,16 @@ class TypeLogic {
     var f: Type = from.innerType;
     var t: Type = to.innerType;
     if (f === SpecialType.INT && t === SpecialType.DOUBLE) return true;
-    if (f === SpecialType.NULL && to.isNullable()) return true;
+    if (f === SpecialType.NULL && to.isPointer()) return true;
     return TypeLogic.equal(f, t);
   }
 
   static checkImplicitlyConversionModifiers(from: WrappedType, to: WrappedType): boolean {
-    if (from.isNullable() && !to.isNullable()) return false;
-    if (from.isOwned() && (to.isOwned() || to.isShared())) return true;
-    if (from.isShared() && to.isShared()) return true;
-    if (!from.isOwned() && !from.isShared() && !to.isOwned() && !to.isShared()) return true;
-    return false;
+    return true;
+    // if (from.isOwned() && (to.isOwned() || to.isShared())) return true;
+    // if (from.isShared() && to.isShared()) return true;
+    // if (!from.isOwned() && !from.isShared() && !to.isOwned() && !to.isShared()) return true;
+    // return false;
   }
 
   static canImplicitlyConvert(from: WrappedType, to: WrappedType): boolean {

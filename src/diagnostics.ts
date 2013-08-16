@@ -22,6 +22,10 @@ function syntaxErrorExtraData(log: Log, range: TRange, text: string) {
   log.error(range, 'syntax error "' + text + '"');
 }
 
+function syntaxErrorDuplicateModifier(log: Log, token: Token) {
+  log.error(token.range, 'duplicate ' + token.text + ' modifier');
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // Semantic diagnostics
 ////////////////////////////////////////////////////////////////////////////////

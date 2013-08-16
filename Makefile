@@ -15,7 +15,7 @@ SOURCES= \
 
 TESTS= \
 	tests/common.ts \
-	tests/tests.ts
+	tests/modifiers.ts
 
 build:
 	time tsc $(SOURCES) --sourcemap --out compiled.js

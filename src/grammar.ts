@@ -52,10 +52,13 @@ function parseType(context: ParserContext): Expression {
   var modifiers: number = 0;
   for (;;) {
     var token: Token = context.current();
-    if (context.eat('owned')) modifiers |= Modifier.OWNED;
-    else if (context.eat('shared')) modifiers |= Modifier.SHARED;
-    else if (context.eat('nullable')) modifiers |= Modifier.NULLABLE;
+    var modifier: number = 0;
+    if (context.eat('ref')) modifier = Modifier.REF;
+    else if (context.eat('owned')) modifier = Modifier.OWNED;
+    else if (context.eat('shared')) modifier = Modifier.SHARED;
     else break;
+    if (modifiers & modifier) syntaxErrorDuplicateModifier(context.log, token);
+    modifiers |= modifier;
   }
 
   var value: Expression = pratt.parse(context, Power.MEMBER - 1); if (value === null) return null;
@@ -96,9 +99,9 @@ function parseStatement(context: ParserContext): Statement {
   // as types in symbol declarations by starting to parse a type and
   // switching over to parsing an expression if it doesn't work out
   if (context.peek('IDENTIFIER') ||
+      context.peek('ref') ||
       context.peek('owned') ||
-      context.peek('shared') ||
-      context.peek('nullable')) {
+      context.peek('shared')) {
     var type: Expression = parseType(context); if (type === null) return null;
     if (!context.peek('IDENTIFIER')) {
       var value: Expression = pratt.resume(context, Power.LOWEST, type); if (value === null) return null;
