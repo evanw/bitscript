@@ -119,3 +119,24 @@ test([
   '}',
 ], [
 ]);
+
+test([
+  'struct Foo {}',
+  'owned Foo foo() {}',
+  'ref Foo bar() {',
+  '  return foo();',
+  '}',
+], [
+  'error on line 4 of <stdin>: new object will be deleted immediately (store it somewhere with an owned or shared type instead)',
+  '',
+  '  return foo();',
+  '         ~~~~~',
+]);
+
+test([
+  'struct Foo {}',
+  'void bar(owned Foo foo) {',
+  '  ref Foo bar = foo;',
+  '}',
+], [
+]);

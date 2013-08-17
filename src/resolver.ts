@@ -91,7 +91,7 @@ class Initializer implements DeclarationVisitor<WrappedType> {
 
   visitVariableDeclaration(node: VariableDeclaration): WrappedType {
     this.resolver.resolveAsType(node.type);
-    return node.type.computedType.wrapWith(Modifier.INSTANCE);
+    return node.type.computedType.wrapWith(Modifier.INSTANCE | Modifier.STORAGE);
   }
 }
 
@@ -203,9 +203,9 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
     });
   }
 
-  checkNewToRef(type: WrappedType, node: Expression) {
-    if (type.isRef() && node instanceof NewExpression) {
-      semanticErrorNewToRef(this.log, node.range);
+  checkRValueToRef(type: WrappedType, node: Expression) {
+    if (!node.computedType.isError() && type.isRef() && node.computedType.isOwned() && !node.computedType.isStorage()) {
+      semanticErrorRValueToRef(this.log, node.range);
     }
   }
 
@@ -329,7 +329,7 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
     if (node.value !== null) {
       this.resolveAsExpression(node.value);
       this.checkImplicitCast(this.context.result, node.value);
-      this.checkNewToRef(this.context.result, node.value);
+      this.checkRValueToRef(this.context.result, node.value);
     }
   }
 
@@ -383,7 +383,7 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
     if (node.value !== null) {
       this.resolveAsExpression(node.value);
       this.checkImplicitCast(node.symbol.type, node.value);
-      this.checkNewToRef(node.symbol.type, node.value);
+      this.checkRValueToRef(node.symbol.type, node.value);
     }
   }
 
@@ -408,7 +408,7 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
 
     if (node.isAssignment()) {
       this.checkImplicitCast(node.left.computedType, node.right);
-      this.checkNewToRef(node.left.computedType, node.right);
+      this.checkRValueToRef(node.left.computedType, node.right);
     }
   }
 
@@ -430,7 +430,7 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
     // Only objects have members
     var structType: StructType = node.value.computedType.asStruct();
     if (structType === null) {
-      semanticErrorNoMembers(this.log, node.range, node.value.computedType);
+      semanticErrorNoMembers(this.log, node.value.range, node.value.computedType);
       return;
     }
 
