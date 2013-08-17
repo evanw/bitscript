@@ -82,7 +82,20 @@ textarea:focus {
   <body>
     <div id="left">
       <h2>Input</h2>
-      <div class="textarea"><textarea id="input"></textarea></div>
+      <div class="textarea"><textarea id="input">
+struct Vector {
+  double x = 1;
+  double y;
+  ref Vector foo = null;
+}
+
+owned Vector addVectors(ref Vector a, ref Vector b) {
+  owned Vector c = new Vector();
+  c.x = a.x + b.x;
+  c.y = a.y + b.y;
+  return c;
+}
+</textarea></div>
     </div>
     <div id="right">
       <h2>Output</h2>

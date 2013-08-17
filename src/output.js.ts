@@ -87,15 +87,17 @@ class OutputJS implements StatementVisitor<Object>, DeclarationVisitor<Object>, 
   }
 
   visitStructDeclaration(node: StructDeclaration): Object {
+    var variables: VariableDeclaration[] = <VariableDeclaration[]>
+      node.block.statements.filter(n => n instanceof VariableDeclaration);
     return {
       type: 'FunctionDeclaration',
-      params: [],
+      params: variables
+        .filter(n => n.value === null)
+        .map(n => { return this.visitIdentifier(n.id); }),
       id: this.visitIdentifier(node.id),
       body: {
         type: 'BlockStatement',
-        body: node.block.statements.map(n => {
-          assert(n instanceof VariableDeclaration);
-          var node: VariableDeclaration = <VariableDeclaration>n;
+        body: variables.map(n => {
           return {
             type: 'ExpressionStatement',
             expression: {
@@ -109,7 +111,7 @@ class OutputJS implements StatementVisitor<Object>, DeclarationVisitor<Object>, 
                 property: this.visitIdentifier(n.id),
                 computed: false
               },
-              right: this.defaultForType(n.symbol.type)
+              right: n.value !== null ? n.value.acceptExpressionVisitor(this) : this.visitIdentifier(n.id)
             }
           }
         })

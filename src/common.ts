@@ -8,6 +8,10 @@ function repeat(text: string, times: number): string {
   return new Array(times + 1).join(text);
 }
 
+function flatten(array: any[][]): any[] {
+  return Array.prototype.concat.apply(Array.prototype, array);
+}
+
 class Source {
   lines: string[];
 

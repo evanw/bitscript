@@ -1,6 +1,14 @@
 declare var cppcodegen: any;
 
+enum OutputCPPMode {
+  NORMAL,
+  DEFINE_STRUCT,
+  IMPLEMENT_STRUCT
+}
+
 class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>, ExpressionVisitor<Object> {
+  mode: OutputCPPMode = OutputCPPMode.NORMAL;
+
   static generate(node: Module): string {
     return cppcodegen.generate(new OutputCPP().visitModule(node), { indent: '  ' });
   }
@@ -47,10 +55,122 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
     return type.isPointer() ? { kind: 'PointerType', inner: inner } : inner;
   }
 
+  forwardDeclareType(node: StructDeclaration): Object {
+    return {
+      kind: 'ObjectDeclaration',
+      type: {
+        kind: 'ObjectType',
+        keyword: 'struct',
+        id: this.visitIdentifier(node.id),
+        bases: [],
+        body: null
+      }
+    };
+  }
+
+  declareType(node: StructDeclaration): Object {
+    this.mode = OutputCPPMode.DEFINE_STRUCT;
+    var body: any = this.visitBlock(node.block);
+    this.mode = OutputCPPMode.NORMAL;
+
+    body.body = body.body.concat(
+      // Forward-declare constructor
+      {
+        kind: 'FunctionDeclaration',
+        qualifiers: [],
+        type: {
+          kind: 'FunctionType',
+          'return': null,
+          'arguments': []
+        },
+        id: this.visitIdentifier(node.id),
+        body: null
+      },
+
+      // Forward-declare destructor
+      {
+        kind: 'FunctionDeclaration',
+        qualifiers: [],
+        type: {
+          kind: 'FunctionType',
+          'return': null,
+          'arguments': []
+        },
+        id: {
+          kind: 'Identifier',
+          name: '~' + node.id.name
+        },
+        body: null
+      }
+    );
+
+    return {
+      kind: 'ObjectDeclaration',
+      type: {
+        kind: 'ObjectType',
+        keyword: 'struct',
+        id: this.visitIdentifier(node.id),
+        bases: [],
+        body: body
+      }
+    };
+  }
+
+  implementType(node: StructDeclaration): Object[] {
+    return [
+      // Implement constructor
+      {
+        kind: 'FunctionDeclaration',
+        qualifiers: [],
+        type: {
+          kind: 'FunctionType',
+          'return': null,
+          'arguments': []
+        },
+        id: {
+          kind: 'MemberType',
+          inner: this.visitIdentifier(node.id),
+          member: this.visitIdentifier(node.id)
+        },
+        body: {
+          kind: 'BlockStatement',
+          body: []
+        }
+      },
+
+      // Implement destructor
+      {
+        kind: 'FunctionDeclaration',
+        qualifiers: [],
+        type: {
+          kind: 'FunctionType',
+          'return': null,
+          'arguments': []
+        },
+        id: {
+          kind: 'MemberType',
+          inner: this.visitIdentifier(node.id),
+          member: {
+            kind: 'Identifier',
+            name: '~' + node.id.name
+          }
+        },
+        body: {
+          kind: 'BlockStatement',
+          body: []
+        }
+      }
+    ];
+  }
+
   visitModule(node: Module): Object {
     return {
       kind: 'Program',
-      body: node.block.statements.map(n => n.acceptStatementVisitor(this))
+      body: flatten([
+        node.block.statements.filter(n => n instanceof StructDeclaration).map(n => this.forwardDeclareType(n)),
+        node.block.statements.filter(n => n instanceof StructDeclaration).map(n => this.declareType(n)),
+        flatten(node.block.statements.filter(n => n instanceof StructDeclaration).map(n => this.implementType(n))),
+        node.block.statements.filter(n => !(n instanceof StructDeclaration)).map(n => n.acceptStatementVisitor(this))])
     };
   }
 
@@ -116,16 +236,8 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
   }
 
   visitStructDeclaration(node: StructDeclaration): Object {
-    return {
-      kind: 'ObjectDeclaration',
-      type: {
-        kind: 'ObjectType',
-        keyword: 'struct',
-        id: this.visitIdentifier(node.id),
-        bases: [],
-        body: this.visitBlock(node.block)
-      }
-    };
+    assert(false);
+    return null;
   }
 
   visitFunctionDeclaration(node: FunctionDeclaration): Object {
@@ -155,7 +267,8 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
         kind: 'Variable',
         type: this.visitType(node.type.computedType),
         id: this.visitIdentifier(node.id),
-        init: node.value !== null ? node.value.acceptExpressionVisitor(this) : null
+        init: node.value !== null && this.mode !== OutputCPPMode.DEFINE_STRUCT ?
+          node.value.acceptExpressionVisitor(this) : null
       }]
     };
   }
@@ -197,7 +310,7 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
   visitMemberExpression(node: MemberExpression): Object {
     return {
       kind: 'MemberExpression',
-      operator: '->',
+      operator: node.value.computedType.isPointer() ? '->' : '.',
       object: node.value.acceptExpressionVisitor(this),
       property: this.visitIdentifier(node.id)
     };
