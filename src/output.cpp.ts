@@ -106,9 +106,13 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
 
   visitStructDeclaration(node: StructDeclaration): Object {
     return {
-      kind: 'ExpressionStatement',
-      expression: {
-        kind: 'NullLiteral'
+      kind: 'ObjectDeclaration',
+      type: {
+        kind: 'ObjectType',
+        keyword: 'struct',
+        id: this.visitIdentifier(node.id),
+        bases: [],
+        body: this.visitBlock(node.block)
       }
     };
   }
@@ -120,7 +124,12 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
       type: {
         kind: 'FunctionType',
         'return': { kind: 'Identifier', name: 'TODO' },
-        'arguments': []
+        'arguments': node.args.map(n => ({
+          kind: 'Variable',
+          type: { kind: 'Identifier', name: 'TODO' },
+          id: this.visitIdentifier(n.id),
+          init: null
+        }))
       },
       id: this.visitIdentifier(node.id),
       body: this.visitBlock(node.block)
@@ -129,10 +138,14 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
 
   visitVariableDeclaration(node: VariableDeclaration): Object {
     return {
-      kind: 'ExpressionStatement',
-      expression: {
-        kind: 'NullLiteral'
-      }
+      kind: 'VariableDeclaration',
+      qualifiers: [],
+      variables: [{
+        kind: 'Variable',
+        type: { kind: 'Identifier', name: 'TODO' },
+        id: this.visitIdentifier(node.id),
+        init: node.value !== null ? node.value.acceptExpressionVisitor(this) : null
+      }]
     };
   }
 
