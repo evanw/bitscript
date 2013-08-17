@@ -1,16 +1,22 @@
-////////////////////////////////////////////////////////////////////////////////
-// Owned
-////////////////////////////////////////////////////////////////////////////////
+test([
+  'struct Foo {}',
+  'Foo foo = new Foo();',
+], [
+  'error on line 2 of <stdin>: cannot convert from value of type owned Foo to value of type Foo',
+  '',
+  'Foo foo = new Foo();',
+  '          ~~~~~~~~~',
+]);
 
-// test([
-//   'struct Foo {}',
-//   'Foo foo = new Foo();',
-// ], [
-//   'error on line 2 of <stdin>: cannot convert from value of type owned Foo to value of type Foo',
-//   '',
-//   'Foo foo = new Foo();',
-//   '          ~~~~~~~~~',
-// ]);
+test([
+  'struct Foo {}',
+  'ref Foo foo = new Foo();',
+], [
+  'error on line 2 of <stdin>: new object will be deleted immediately (store it somewhere with an owned or shared type instead)',
+  '',
+  'ref Foo foo = new Foo();',
+  '              ~~~~~~~~~',
+]);
 
 test([
   'struct Foo {}',
@@ -18,19 +24,44 @@ test([
 ], [
 ]);
 
-////////////////////////////////////////////////////////////////////////////////
-// Shared
-////////////////////////////////////////////////////////////////////////////////
-
 test([
   'struct Foo {}',
   'shared Foo foo = new Foo();',
 ], [
 ]);
 
-////////////////////////////////////////////////////////////////////////////////
-// Other
-////////////////////////////////////////////////////////////////////////////////
+test([
+  'struct Foo {}',
+  'ref Foo foo;',
+  'owned Foo bar = foo;',
+], [
+  'error on line 3 of <stdin>: cannot convert from value of type ref Foo to value of type owned Foo',
+  '',
+  'owned Foo bar = foo;',
+  '                ~~~',
+]);
+
+test([
+  'struct Foo {}',
+  'ref Foo foo;',
+  'shared Foo bar = foo;',
+], [
+  'error on line 3 of <stdin>: cannot convert from value of type ref Foo to value of type shared Foo',
+  '',
+  'shared Foo bar = foo;',
+  '                 ~~~',
+]);
+
+test([
+  'struct Foo {}',
+  'shared Foo foo;',
+  'owned Foo bar = foo;',
+], [
+  'error on line 3 of <stdin>: cannot convert from value of type shared Foo to value of type owned Foo',
+  '',
+  'owned Foo bar = foo;',
+  '                ~~~',
+]);
 
 test([
   'struct Foo {}',
@@ -44,7 +75,7 @@ test([
 
 test([
   'struct Link {',
-  '  ref Link next;',
+  '  ref Link next; // Test circular types',
   '}',
 ], [
 ]);

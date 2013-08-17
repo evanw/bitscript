@@ -74,3 +74,7 @@ function semanticErrorArgumentCount(log: Log, range: TRange, expected: number, f
     'expected ' + expected + ' argument' + (expected === 1 ? '' : 's') +
     ' but found ' + found + ' argument' + (found === 1 ? '' : 's'));
 }
+
+function semanticErrorNewToRef(log: Log, range: TRange) {
+  log.error(range, 'new object will be deleted immediately (store it somewhere with an owned or shared type instead)');
+}

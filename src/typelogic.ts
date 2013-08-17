@@ -13,11 +13,11 @@ class TypeLogic {
   }
 
   static checkImplicitlyConversionModifiers(from: WrappedType, to: WrappedType): boolean {
-    return true;
-    // if (from.isOwned() && (to.isOwned() || to.isShared())) return true;
-    // if (from.isShared() && to.isShared()) return true;
-    // if (!from.isOwned() && !from.isShared() && !to.isOwned() && !to.isShared()) return true;
-    // return false;
+    if (from.isRef() && to.isRef()) return true;
+    if (from.isOwned() && to.isPointer()) return true;
+    if (from.isShared() && to.isPointer() && !to.isOwned()) return true;
+    if (from.isPrimitive() && to.isPrimitive()) return true;
+    return false;
   }
 
   static canImplicitlyConvert(from: WrappedType, to: WrappedType): boolean {

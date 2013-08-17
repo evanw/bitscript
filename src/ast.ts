@@ -270,6 +270,10 @@ class BinaryExpression extends Expression {
   acceptExpressionVisitor<T>(visitor: ExpressionVisitor<T>): T {
     return visitor.visitBinaryExpression(this);
   }
+
+  isAssignment(): boolean {
+    return this.op === '=';
+  }
 }
 
 class TernaryExpression extends Expression {

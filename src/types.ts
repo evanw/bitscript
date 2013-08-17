@@ -101,6 +101,18 @@ class WrappedType {
     return this.innerType === SpecialType.CIRCULAR;
   }
 
+  isPrimitive(): boolean {
+    return this.innerType === SpecialType.INT || this.innerType === SpecialType.DOUBLE || this.innerType === SpecialType.BOOL;
+  }
+
+  isStruct(): boolean {
+    return this.innerType instanceof StructType;
+  }
+
+  isFunction(): boolean {
+    return this.innerType instanceof FunctionType;
+  }
+
   asStruct(): StructType {
     return this.innerType instanceof StructType ? <StructType>this.innerType : null;
   }

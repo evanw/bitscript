@@ -74,7 +74,7 @@ class Initializer implements DeclarationVisitor<WrappedType> {
       this.resolver.define(n);
       this.resolver.ensureDeclarationIsInitialized(n);
       return n.symbol.type;
-    }, this);
+    });
     this.resolver.popContext();
 
     return SpecialType.ERROR.wrap(0);
@@ -121,6 +121,7 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
   }
 
   resolve(node: Expression) {
+    // Only resolve once
     if (node.computedType === null) {
       node.computedType = SpecialType.ERROR.wrap(0);
       node.acceptExpressionVisitor(this);
@@ -128,6 +129,10 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
   }
 
   resolveAsExpression(node: Expression) {
+    // Only resolve once
+    if (node.computedType !== null) {
+      return;
+    }
     this.resolve(node);
 
     // Must be an instance
@@ -138,6 +143,10 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
   }
 
   resolveAsType(node: Expression) {
+    // Only resolve once
+    if (node.computedType !== null) {
+      return;
+    }
     this.resolve(node);
 
     // Must not be an instance
@@ -183,6 +192,12 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
     args.forEach((n, i) => {
       this.checkImplicitCast(type.args[i], n);
     });
+  }
+
+  checkNewToRef(type: WrappedType, node: Expression) {
+    if (type.isRef() && node instanceof NewExpression) {
+      semanticErrorNewToRef(this.log, node.range);
+    }
   }
 
   ensureDeclarationIsInitialized(node: Declaration) {
@@ -358,6 +373,7 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
     if (node.value !== null) {
       this.resolveAsExpression(node.value);
       this.checkImplicitCast(node.symbol.type, node.value);
+      this.checkNewToRef(node.symbol.type, node.value);
     }
   }
 
@@ -379,6 +395,11 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
   visitBinaryExpression(node: BinaryExpression) {
     this.resolveAsExpression(node.left);
     this.resolveAsExpression(node.right);
+
+    if (node.isAssignment()) {
+      this.checkImplicitCast(node.left.computedType, node.right);
+      this.checkNewToRef(node.left.computedType, node.right);
+    }
   }
 
   visitTernaryExpression(node: TernaryExpression) {
@@ -405,7 +426,7 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
   }
 
   visitNullExpression(node: NullExpression) {
-    node.computedType = SpecialType.NULL.wrap(Modifier.INSTANCE);
+    node.computedType = SpecialType.NULL.wrap(Modifier.INSTANCE | Modifier.OWNED);
   }
 
   visitCallExpression(node: CallExpression) {
@@ -443,7 +464,7 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
       return;
     }
 
-    if (all !== 0 && node.type.computedType.asStruct() === null) {
+    if (node.type.computedType.isInstance() || all !== 0 && !node.type.computedType.isStruct()) {
       semanticErrorInvalidPointerModifier(this.log, node.range, node.type.computedType);
       return;
     }
