@@ -49,7 +49,9 @@ class Initializer implements DeclarationVisitor<WrappedType> {
   visitStructDeclaration(node: StructDeclaration): WrappedType {
     // Create and populate the block scope
     node.block.scope = new Scope(this.resolver.context.scope);
+    this.resolver.pushContext(this.resolver.context.cloneWithScope(node.block.scope));
     this.resolver.initializeBlock(node.block);
+    this.resolver.popContext();
 
     // Create the struct type
     var type: StructType = new StructType(node.symbol.name, node.block.scope);
