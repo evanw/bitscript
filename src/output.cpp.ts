@@ -2,7 +2,7 @@ declare var cppcodegen: any;
 
 class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>, ExpressionVisitor<Object> {
   static generate(node: Module): string {
-    return cppcodegen.generate(new OutputCPP().visitModule(node), { indent: '  ' });
+    return cppcodegen.generate(new OutputCPP().visitModule(node), { indent: '  ' }).trim();
   }
 
   defaultForType(type: WrappedType): Object {
@@ -133,24 +133,14 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
           inner: this.visitIdentifier(node.id),
           member: this.visitIdentifier(node.id)
         },
+        initializations: variables.map(n => ({
+          kind: 'CallExpression',
+          callee: this.visitIdentifier(n.id),
+          'arguments': [n.value !== null ? n.value.acceptExpressionVisitor(this) : this.visitIdentifier(n.id)]
+        })),
         body: {
           kind: 'BlockStatement',
-          body: variables.map(n => ({
-            kind: 'ExpressionStatement',
-            expression: {
-              kind: 'AssignmentExpression',
-              operator: '=',
-              left: n.value !== null ? this.visitIdentifier(n.id) : {
-                kind: 'MemberExpression',
-                operator: '->',
-                object: {
-                  kind: 'ThisExpression'
-                },
-                member: this.visitIdentifier(n.id)
-              },
-              right: n.value !== null ? n.value.acceptExpressionVisitor(this) : this.visitIdentifier(n.id)
-            }
-          }))
+          body: []
         }
       },
 
