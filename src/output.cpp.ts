@@ -40,13 +40,11 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
     }
 
     assert(type.innerType instanceof StructType);
-    return {
-      kind: 'PointerType',
-      inner: {
-        kind: 'Identifier',
-        name: (<StructType>type.innerType).name
-      }
+    var inner: Object = {
+      kind: 'Identifier',
+      name: (<StructType>type.innerType).name
     };
+    return type.isPointer() ? { kind: 'PointerType', inner: inner } : inner;
   }
 
   visitModule(node: Module): Object {
@@ -103,15 +101,13 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
 
   visitBreakStatement(node: BreakStatement): Object {
     return {
-      kind: 'BreakStatement',
-      label: null
+      kind: 'BreakStatement'
     };
   }
 
   visitContinueStatement(node: ContinueStatement): Object {
     return {
-      kind: 'ContinueStatement',
-      label: null
+      kind: 'ContinueStatement'
     };
   }
 
