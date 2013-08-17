@@ -1,22 +1,22 @@
 // The same operator precedence as C
-class Power {
-  static LOWEST: number = 0;
-  static COMMA: number = 1;
-  static ASSIGN: number = 2;
-  static TERNARY: number = 3;
-  static OR: number = 4;
-  static AND: number = 5;
-  static BITOR: number = 6;
-  static BITXOR: number = 7;
-  static BITAND: number = 8;
-  static EQ_NEQ: number = 9;
-  static COMPARE: number = 10;
-  static SHIFT: number = 11;
-  static ADD_SUB: number = 12;
-  static MUL_DIV: number = 13;
-  static UNARY: number = 14;
-  static CALL: number = 15;
-  static MEMBER: number = 16;
+enum Power {
+  LOWEST,
+  COMMA,
+  ASSIGN,
+  TERNARY,
+  OR,
+  AND,
+  BITOR,
+  BITXOR,
+  BITAND,
+  EQ_NEQ,
+  COMPARE,
+  SHIFT,
+  ADD_SUB,
+  MUL_DIV,
+  UNARY,
+  CALL,
+  MEMBER,
 }
 
 function parseGroup(context: ParserContext): Expression {

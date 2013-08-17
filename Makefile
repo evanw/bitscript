@@ -12,7 +12,8 @@ SOURCES= \
 	src/typelogic.ts \
 	src/resolver.ts \
 	src/compiler.ts \
-	src/output.js.ts
+	src/output.js.ts \
+	src/output.cpp.ts
 
 TESTS= \
 	tests/common.ts \
