@@ -7,7 +7,8 @@ class ResolverFlag {
 class ResolverContext {
   constructor(
     public scope: Scope,
-    public flags: number) {
+    public flags: number,
+    public result: WrappedType) {
   }
 
   inLoop(): boolean {
@@ -25,7 +26,8 @@ class ResolverContext {
   clone(): ResolverContext {
     return new ResolverContext(
       this.scope,
-      this.flags);
+      this.flags,
+      this.result);
   }
 
   cloneWithScope(scope: Scope) {
@@ -37,6 +39,13 @@ class ResolverContext {
   cloneWithFlag(flag: number) {
     var clone = this.clone();
     clone.flags |= flag;
+    return clone;
+  }
+
+  cloneWithReturnType(result: WrappedType) {
+    var clone = this.clone();
+    clone.flags |= ResolverFlag.IN_FUNCTION;
+    clone.result = result;
     return clone;
   }
 }
@@ -70,14 +79,14 @@ class Initializer implements DeclarationVisitor<WrappedType> {
 
     // Define the arguments in the function scope
     this.resolver.pushContext(this.resolver.context.cloneWithScope(node.block.scope));
-    var argTypes: WrappedType[] = node.args.map(n => {
+    var args: WrappedType[] = node.args.map(n => {
       this.resolver.define(n);
       this.resolver.ensureDeclarationIsInitialized(n);
-      return n.symbol.type;
+      return n.symbol.type.wrapWith(Modifier.INSTANCE);
     });
     this.resolver.popContext();
 
-    return SpecialType.ERROR.wrap(0);
+    return new FunctionType(node.result.computedType.wrapWith(Modifier.INSTANCE), args).wrap(Modifier.INSTANCE);
   }
 
   visitVariableDeclaration(node: VariableDeclaration): WrappedType {
@@ -88,7 +97,7 @@ class Initializer implements DeclarationVisitor<WrappedType> {
 
 class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, ExpressionVisitor<void> {
   stack: ResolverContext[] = [];
-  context: ResolverContext = new ResolverContext(Resolver.createGlobalScope(), 0);
+  context: ResolverContext = new ResolverContext(Resolver.createGlobalScope(), 0, null);
   isInitialized: { [uniqueID: number]: boolean } = {};
   definitionContext: { [uniqueID: number]: ResolverContext } = {};
   initializer: Initializer = new Initializer(this);
@@ -319,6 +328,8 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
 
     if (node.value !== null) {
       this.resolveAsExpression(node.value);
+      this.checkImplicitCast(this.context.result, node.value);
+      this.checkNewToRef(this.context.result, node.value);
     }
   }
 
@@ -359,9 +370,8 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
     }
 
     this.ensureDeclarationIsInitialized(node);
-    this.resolveAsType(node.result);
     node.args.forEach(n => n.acceptDeclarationVisitor(this));
-    this.pushContext(this.context.cloneWithFlag(ResolverFlag.IN_FUNCTION));
+    this.pushContext(this.context.cloneWithReturnType(node.symbol.type.asFunction().result));
     this.visitBlock(node.block);
     this.popContext();
   }

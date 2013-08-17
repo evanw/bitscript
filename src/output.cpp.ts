@@ -401,7 +401,7 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
     return {
       kind: 'NewExpression',
       callee: node.type.acceptExpressionVisitor(this),
-      arguments: []
+      arguments: node.args.map(n => n.acceptExpressionVisitor(this))
     };
   }
 

@@ -226,7 +226,7 @@ class OutputJS implements StatementVisitor<Object>, DeclarationVisitor<Object>, 
     return {
       type: 'NewExpression',
       callee: node.type.acceptExpressionVisitor(this),
-      arguments: []
+      arguments: node.args.map(n => n.acceptExpressionVisitor(this))
     };
   }
 

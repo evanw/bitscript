@@ -79,3 +79,43 @@ test([
   '}',
 ], [
 ]);
+
+test([
+  'struct Foo {}',
+  'Foo foo() {',
+  '  return new Foo();',
+  '}',
+], [
+  'error on line 3 of <stdin>: cannot convert from value of type owned Foo to value of type Foo',
+  '',
+  '  return new Foo();',
+  '         ~~~~~~~~~',
+]);
+
+test([
+  'struct Foo {}',
+  'ref Foo foo() {',
+  '  return new Foo();',
+  '}',
+], [
+  'error on line 3 of <stdin>: new object will be deleted immediately (store it somewhere with an owned or shared type instead)',
+  '',
+  '  return new Foo();',
+  '         ~~~~~~~~~',
+]);
+
+test([
+  'struct Foo {}',
+  'shared Foo foo() {',
+  '  return new Foo();',
+  '}',
+], [
+]);
+
+test([
+  'struct Foo {}',
+  'owned Foo foo() {',
+  '  return new Foo();',
+  '}',
+], [
+]);
