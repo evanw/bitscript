@@ -36,7 +36,21 @@ class SpecialType extends Type {
   }
 }
 
+class FunctionType extends Type {
+  constructor(
+    public result: WrappedType,
+    public args: WrappedType[]) {
+    super();
+  }
+
+  asString(): string {
+    return this.result.asString() + ' function(' + this.args.map(t => t.asString()).join(', ') + ')';
+  }
+}
+
 class StructType extends Type {
+  constructorType: FunctionType = null;
+
   constructor(
     public name: string,
     public scope: Scope) {
@@ -87,14 +101,25 @@ class WrappedType {
     return this.innerType === SpecialType.CIRCULAR;
   }
 
+  asStruct(): StructType {
+    return this.innerType instanceof StructType ? <StructType>this.innerType : null;
+  }
+
+  asFunction(): FunctionType {
+    return this.innerType instanceof FunctionType ? <FunctionType>this.innerType : null;
+  }
+
   asString(): string {
     return (
-      (this.modifiers & Modifier.INSTANCE ? 'value of type ' : 'type ') +
       (this.modifiers & Modifier.REF ? 'ref ' : '') +
       (this.modifiers & Modifier.OWNED ? 'owned ' : '') +
       (this.modifiers & Modifier.SHARED ? 'shared ' : '') +
       this.innerType.asString()
     );
+  }
+
+  toString(): string {
+    return (this.modifiers & Modifier.INSTANCE ? 'value of type ' : 'type ') + this.asString();
   }
 
   wrapWith(flag: number): WrappedType {

@@ -38,7 +38,7 @@ function semanticErrorDuplicateSymbol(log: Log, range: TRange, symbol: Symbol) {
 }
 
 function semanticErrorIncompatibleTypes(log: Log, range: TRange, from: WrappedType, to: WrappedType) {
-  log.error(range, 'cannot convert from ' + from.asString() + ' to ' + to.asString());
+  log.error(range, 'cannot convert from ' + from + ' to ' + to);
 }
 
 function semanticErrorCircularType(log: Log, range: TRange) {
@@ -50,7 +50,7 @@ function semanticErrorUnknownSymbol(log: Log, range: TRange, name: string) {
 }
 
 function semanticErrorUnexpectedExpression(log: Log, range: TRange, type: WrappedType) {
-  log.error(range, 'unexpected ' + type.asString());
+  log.error(range, 'unexpected ' + type);
 }
 
 function semanticErrorModifierConflict(log: Log, range: TRange, a: string, b: string) {
@@ -59,4 +59,14 @@ function semanticErrorModifierConflict(log: Log, range: TRange, a: string, b: st
 
 function semanticErrorUnexpectedStatement(log: Log, range: TRange, text: string) {
   log.error(range, 'cannot use ' + text + ' here');
+}
+
+function semanticErrorInvalidNew(log: Log, range: TRange, type: WrappedType) {
+  log.error(range, 'cannot use new on ' + type);
+}
+
+function semanticErrorArgumentCount(log: Log, range: TRange, expected: number, found: number) {
+  log.error(range,
+    'expected ' + expected + ' argument' + (expected === 1 ? '' : 's') +
+    ' but found ' + found + ' argument' + (found === 1 ? '' : 's'));
 }

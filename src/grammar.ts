@@ -264,8 +264,10 @@ pratt.parselet('(', Power.CALL).infix = (context, left) => {
 pratt.parselet('new', Power.LOWEST).prefix = context => {
   var token: Token = context.next();
   var type: Expression = parseType(context); if (type === null) return null;
-  if (!context.expect('(') || !context.expect(')')) return null;
-  return new NewExpression(context.spanSince(token.range), type);
+  if (!context.expect('(')) return null;
+  var args: Expression[] = parseExpressions(context); if (args === null) return null;
+  if (!context.expect(')')) return null;
+  return new NewExpression(context.spanSince(token.range), type, args);
 };
 
 function parse(log: Log, tokens: Token[]): Module {

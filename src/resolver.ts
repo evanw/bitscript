@@ -53,6 +53,9 @@ class Initializer implements DeclarationVisitor<WrappedType> {
 
     // Create the struct type
     var type: StructType = new StructType(node.symbol.name, node.block.scope);
+    type.constructorType = new FunctionType(null, node.block.statements
+      .filter(n => n instanceof VariableDeclaration && n.value === null)
+      .map(n => (this.resolver.ensureDeclarationIsInitialized(n), (<VariableDeclaration>n).symbol.type)));
     return type.wrap(0);
   }
 
@@ -168,6 +171,17 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
     }
   }
 
+  checkCallArguments(range: TRange, type: FunctionType, args: Expression[]) {
+    if (type.args.length !== args.length) {
+      semanticErrorArgumentCount(this.log, range, type.args.length, args.length);
+      return;
+    }
+
+    args.forEach((n, i) => {
+      this.checkImplicitCast(type.args[i], n);
+    });
+  }
+
   ensureDeclarationIsInitialized(node: Declaration) {
     assert(node.symbol !== null);
     if (node.symbol.type !== null) {
@@ -259,6 +273,7 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
     }
 
     this.resolveAsExpression(node.test);
+    this.checkImplicitCast(SpecialType.BOOL.wrap(0), node.test);
     this.visitBlock(node.thenBlock);
     if (node.elseBlock !== null) {
       this.visitBlock(node.elseBlock);
@@ -272,6 +287,7 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
     }
 
     this.resolveAsExpression(node.test);
+    this.checkImplicitCast(SpecialType.BOOL.wrap(0), node.test);
     this.pushContext(this.context.cloneWithFlag(ResolverFlag.IN_LOOP));
     this.visitBlock(node.block);
     this.popContext();
@@ -364,6 +380,7 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
 
   visitTernaryExpression(node: TernaryExpression) {
     this.resolveAsExpression(node.value);
+    this.checkImplicitCast(SpecialType.BOOL.wrap(0), node.value);
     this.resolveAsExpression(node.trueValue);
     this.resolveAsExpression(node.falseValue);
   }
@@ -390,16 +407,25 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
 
   visitCallExpression(node: CallExpression) {
     this.resolveAsExpression(node.value);
-    node.args.forEach(n => n.acceptExpressionVisitor(this));
+    node.args.forEach(n => this.resolveAsExpression(n));
   }
 
   visitNewExpression(node: NewExpression) {
     this.resolveAsType(node.type);
+    node.args.forEach(n => this.resolveAsExpression(n));
+
     if (node.type.computedType.isError()) {
       return;
     }
 
-    node.computedType = node.type.computedType.innerType.wrap(Modifier.INSTANCE | Modifier.OWNED);
+    var structType: StructType = node.type.computedType.asStruct();
+    if (node.type.computedType.isInstance() || structType === null) {
+      semanticErrorInvalidNew(this.log, node.range, node.type.computedType);
+      return;
+    }
+
+    this.checkCallArguments(node.range, structType.constructorType, node.args);
+    node.computedType = structType.wrap(Modifier.INSTANCE | Modifier.OWNED);
   }
 
   visitModifierExpression(node: ModifierExpression) {

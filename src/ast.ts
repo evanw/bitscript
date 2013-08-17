@@ -365,7 +365,8 @@ class CallExpression extends Expression {
 class NewExpression extends Expression {
   constructor(
     range: TRange,
-    public type: Expression) {
+    public type: Expression,
+    public args: Expression[]) {
     super(range);
   }
 
