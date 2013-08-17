@@ -6,23 +6,20 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
   }
 
   defaultForType(type: WrappedType): Object {
-    var t: Type = type.innerType;
-
-    if (t === SpecialType.INT) {
+    switch (type.innerType) {
+    case SpecialType.INT:
       return {
         kind: 'IntegerLiteral',
         value: 0
       };
-    }
 
-    if (t === SpecialType.DOUBLE) {
+    case SpecialType.DOUBLE:
       return {
         kind: 'DoubleLiteral',
         value: 0
       };
-    }
 
-    if (t === SpecialType.BOOL) {
+    case SpecialType.BOOL:
       return {
         kind: 'BooleanLiteral',
         value: false
@@ -31,6 +28,24 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
 
     return {
       kind: 'NullLiteral'
+    };
+  }
+
+  visitType(type: WrappedType): Object {
+    switch (type.innerType) {
+    case SpecialType.INT: return { kind: 'Identifier', name: 'int' };
+    case SpecialType.VOID: return { kind: 'Identifier', name: 'void' };
+    case SpecialType.BOOL: return { kind: 'Identifier', name: 'bool' };
+    case SpecialType.DOUBLE: return { kind: 'Identifier', name: 'double' };
+    }
+
+    assert(type.innerType instanceof StructType);
+    return {
+      kind: 'PointerType',
+      inner: {
+        kind: 'Identifier',
+        name: (<StructType>type.innerType).name
+      }
     };
   }
 
@@ -123,10 +138,10 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
       qualifiers: [],
       type: {
         kind: 'FunctionType',
-        'return': { kind: 'Identifier', name: 'TODO' },
+        'return': this.visitType(node.result.computedType),
         'arguments': node.args.map(n => ({
           kind: 'Variable',
-          type: { kind: 'Identifier', name: 'TODO' },
+          type: this.visitType(n.type.computedType),
           id: this.visitIdentifier(n.id),
           init: null
         }))
@@ -142,7 +157,7 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
       qualifiers: [],
       variables: [{
         kind: 'Variable',
-        type: { kind: 'Identifier', name: 'TODO' },
+        type: this.visitType(node.type.computedType),
         id: this.visitIdentifier(node.id),
         init: node.value !== null ? node.value.acceptExpressionVisitor(this) : null
       }]
