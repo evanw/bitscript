@@ -421,6 +421,27 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
 
   visitMemberExpression(node: MemberExpression) {
     this.resolveAsExpression(node.value);
+
+    // Avoid reporting duplicate errors
+    if (node.value.computedType.isError()) {
+      return;
+    }
+
+    // Only objects have members
+    var structType: StructType = node.value.computedType.asStruct();
+    if (structType === null) {
+      semanticErrorNoMembers(this.log, node.range, node.value.computedType);
+      return;
+    }
+
+    // Search for the symbol
+    node.symbol = this.findMemberSymbol(structType, node.id);
+    if (node.symbol === null) {
+      semanticErrorUnknownMemberSymbol(this.log, node.id.range, node.id.name, node.value.computedType);
+      return;
+    }
+
+    node.computedType = node.symbol.type;
   }
 
   visitIntExpression(node: IntExpression) {
@@ -442,18 +463,35 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
   visitCallExpression(node: CallExpression) {
     this.resolveAsExpression(node.value);
     node.args.forEach(n => this.resolveAsExpression(n));
+
+    // Avoid reporting duplicate errors
+    if (node.value.computedType.isError()) {
+      return;
+    }
+
+    // Calls only work on function types
+    var functionType: FunctionType = node.value.computedType.asFunction();
+    if (functionType === null) {
+      semanticErrorInvalidCall(this.log, node.range, node.value.computedType);
+      return;
+    }
+
+    this.checkCallArguments(node.range, functionType, node.args);
+    node.computedType = functionType.result;
   }
 
   visitNewExpression(node: NewExpression) {
     this.resolveAsType(node.type);
     node.args.forEach(n => this.resolveAsExpression(n));
 
+    // Avoid reporting duplicate errors
     if (node.type.computedType.isError()) {
       return;
     }
 
+    // New only works on object types
     var structType: StructType = node.type.computedType.asStruct();
-    if (node.type.computedType.isInstance() || structType === null) {
+    if (structType === null) {
       semanticErrorInvalidNew(this.log, node.range, node.type.computedType);
       return;
     }
@@ -464,6 +502,8 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
 
   visitModifierExpression(node: ModifierExpression) {
     this.resolveAsType(node.type);
+
+    // Avoid reporting duplicate errors
     if (node.type.computedType.isError()) {
       return;
     }
@@ -474,7 +514,7 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
       return;
     }
 
-    if (node.type.computedType.isInstance() || all !== 0 && !node.type.computedType.isStruct()) {
+    if (all !== 0 && !node.type.computedType.isStruct()) {
       semanticErrorInvalidPointerModifier(this.log, node.range, node.type.computedType);
       return;
     }

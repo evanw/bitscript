@@ -69,6 +69,10 @@ function semanticErrorInvalidNew(log: Log, range: TRange, type: WrappedType) {
   log.error(range, 'cannot use new on ' + type);
 }
 
+function semanticErrorInvalidCall(log: Log, range: TRange, type: WrappedType) {
+  log.error(range, 'cannot call ' + type);
+}
+
 function semanticErrorArgumentCount(log: Log, range: TRange, expected: number, found: number) {
   log.error(range,
     'expected ' + expected + ' argument' + (expected === 1 ? '' : 's') +
@@ -77,4 +81,12 @@ function semanticErrorArgumentCount(log: Log, range: TRange, expected: number, f
 
 function semanticErrorNewToRef(log: Log, range: TRange) {
   log.error(range, 'new object will be deleted immediately (store it somewhere with an owned or shared type instead)');
+}
+
+function semanticErrorNoMembers(log: Log, range: TRange, type: WrappedType) {
+  log.error(range, 'no members on ' + type);
+}
+
+function semanticErrorUnknownMemberSymbol(log: Log, range: TRange, name: string, type: WrappedType) {
+  log.error(range, name + ' is not defined on ' + type);
 }
