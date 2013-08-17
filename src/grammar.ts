@@ -48,6 +48,8 @@ function parseIdentifier(context: ParserContext): Identifier {
 }
 
 function parseType(context: ParserContext): Expression {
+  var range: TRange = context.current().range;
+
   // Parse modifiers
   var modifiers: number = 0;
   for (;;) {
@@ -62,7 +64,7 @@ function parseType(context: ParserContext): Expression {
   }
 
   var value: Expression = pratt.parse(context, Power.MEMBER - 1); if (value === null) return null;
-  return modifiers !== 0 ? new ModifierExpression(value.range, value, modifiers) : value;
+  return modifiers !== 0 ? new ModifierExpression(context.spanSince(range), value, modifiers) : value;
 }
 
 function parseArguments(context: ParserContext): VariableDeclaration[] {

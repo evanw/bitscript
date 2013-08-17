@@ -53,8 +53,9 @@ class Initializer implements DeclarationVisitor<WrappedType> {
     this.resolver.initializeBlock(node.block);
     this.resolver.popContext();
 
-    // Create the struct type
+    // Create the struct type including the constructor
     var type: StructType = new StructType(node.symbol.name, node.block.scope);
+    node.symbol.type = type.wrap(0); // Cheat and set this early before we initialize member variables
     type.constructorType = new FunctionType(null, node.block.statements
       .filter(n => n instanceof VariableDeclaration && n.value === null)
       .map(n => (this.resolver.ensureDeclarationIsInitialized(n), (<VariableDeclaration>n).symbol.type)));
@@ -436,9 +437,14 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
       return;
     }
 
-    var both: number = Modifier.OWNED | Modifier.SHARED;
-    if ((node.modifiers & both) === both) {
-      semanticErrorModifierConflict(this.log, node.range, 'owned', 'shared');
+    var all: number = node.modifiers & (Modifier.REF | Modifier.OWNED | Modifier.SHARED);
+    if (all !== Modifier.REF && all !== Modifier.OWNED && all !== Modifier.SHARED) {
+      semanticErrorPointerModifierConflict(this.log, node.range);
+      return;
+    }
+
+    if (all !== 0 && node.type.computedType.asStruct() === null) {
+      semanticErrorInvalidPointerModifier(this.log, node.range, node.type.computedType);
       return;
     }
 
