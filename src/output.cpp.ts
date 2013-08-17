@@ -1,14 +1,6 @@
 declare var cppcodegen: any;
 
-enum OutputCPPMode {
-  NORMAL,
-  DEFINE_STRUCT,
-  IMPLEMENT_STRUCT
-}
-
 class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>, ExpressionVisitor<Object> {
-  mode: OutputCPPMode = OutputCPPMode.NORMAL;
-
   static generate(node: Module): string {
     return cppcodegen.generate(new OutputCPP().visitModule(node), { indent: '  ' });
   }
@@ -62,47 +54,22 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
         kind: 'ObjectType',
         keyword: 'struct',
         id: this.visitIdentifier(node.id),
-        bases: [],
-        body: null
+        bases: []
       }
     };
   }
 
+  createVariables(variables: VariableDeclaration[]): Object[] {
+    return variables.map(n => <Object>{
+      kind: 'Variable',
+      type: this.visitType(n.type.computedType),
+      id: this.visitIdentifier(n.id)
+    });
+  }
+
   declareType(node: StructDeclaration): Object {
-    this.mode = OutputCPPMode.DEFINE_STRUCT;
-    var body: any = this.visitBlock(node.block);
-    this.mode = OutputCPPMode.NORMAL;
-
-    body.body = body.body.concat(
-      // Forward-declare constructor
-      {
-        kind: 'FunctionDeclaration',
-        qualifiers: [],
-        type: {
-          kind: 'FunctionType',
-          'return': null,
-          'arguments': []
-        },
-        id: this.visitIdentifier(node.id),
-        body: null
-      },
-
-      // Forward-declare destructor
-      {
-        kind: 'FunctionDeclaration',
-        qualifiers: [],
-        type: {
-          kind: 'FunctionType',
-          'return': null,
-          'arguments': []
-        },
-        id: {
-          kind: 'Identifier',
-          name: '~' + node.id.name
-        },
-        body: null
-      }
-    );
+    var variables: VariableDeclaration[] = <VariableDeclaration[]>
+      node.block.statements.filter(n => n instanceof VariableDeclaration);
 
     return {
       kind: 'ObjectDeclaration',
@@ -111,12 +78,47 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
         keyword: 'struct',
         id: this.visitIdentifier(node.id),
         bases: [],
-        body: body
+        body: {
+          kind: 'BlockStatement',
+          body: this.createVariables(variables).map(n => <Object>{
+            kind: 'VariableDeclaration',
+            qualifiers: [],
+            variables: [n]
+          }).concat(
+            // Forward-declare constructor
+            {
+              kind: 'FunctionDeclaration',
+              qualifiers: [],
+              type: {
+                kind: 'FunctionType',
+                'arguments': this.createVariables(variables.filter(n => n.value === null))
+              },
+              id: this.visitIdentifier(node.id)
+            },
+
+            // Forward-declare destructor
+            {
+              kind: 'FunctionDeclaration',
+              qualifiers: [],
+              type: {
+                kind: 'FunctionType',
+                'arguments': []
+              },
+              id: {
+                kind: 'Identifier',
+                name: '~' + node.id.name
+              }
+            }
+          )
+        }
       }
     };
   }
 
   implementType(node: StructDeclaration): Object[] {
+    var variables: VariableDeclaration[] = <VariableDeclaration[]>
+      node.block.statements.filter(n => n instanceof VariableDeclaration);
+
     return [
       // Implement constructor
       {
@@ -124,8 +126,7 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
         qualifiers: [],
         type: {
           kind: 'FunctionType',
-          'return': null,
-          'arguments': []
+          'arguments': this.createVariables(variables.filter(n => n.value === null))
         },
         id: {
           kind: 'MemberType',
@@ -134,7 +135,22 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
         },
         body: {
           kind: 'BlockStatement',
-          body: []
+          body: variables.map(n => ({
+            kind: 'ExpressionStatement',
+            expression: {
+              kind: 'AssignmentExpression',
+              operator: '=',
+              left: n.value !== null ? this.visitIdentifier(n.id) : {
+                kind: 'MemberExpression',
+                operator: '->',
+                object: {
+                  kind: 'ThisExpression'
+                },
+                member: this.visitIdentifier(n.id)
+              },
+              right: n.value !== null ? n.value.acceptExpressionVisitor(this) : this.visitIdentifier(n.id)
+            }
+          }))
         }
       },
 
@@ -144,7 +160,6 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
         qualifiers: [],
         type: {
           kind: 'FunctionType',
-          'return': null,
           'arguments': []
         },
         id: {
@@ -157,7 +172,41 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
         },
         body: {
           kind: 'BlockStatement',
-          body: []
+          body: flatten(variables.map(n => {
+            if (n.symbol.type.isOwned()) {
+              return [{
+                kind: 'ExpressionStatement',
+                expression: {
+                  kind: 'UnaryExpression',
+                  operator: 'delete',
+                  argument: this.visitIdentifier(n.id)
+                }
+              }];
+            }
+
+            if (n.symbol.type.isShared()) {
+              return [{
+                kind: 'ExpressionStatement',
+                expression: {
+                  kind: 'CallExpression',
+                  callee: {
+                    kind: 'MemberType',
+                    inner: {
+                      kind: 'Identifier',
+                      name: 'bitscript'
+                    },
+                    member: {
+                      kind: 'Identifier',
+                      name: 'deref'
+                    }
+                  },
+                  'arguments': [this.visitIdentifier(n.id)]
+                }
+              }];
+            }
+
+            return [];
+          }))
         }
       }
     ];
@@ -250,8 +299,7 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
         'arguments': node.args.map(n => ({
           kind: 'Variable',
           type: this.visitType(n.type.computedType),
-          id: this.visitIdentifier(n.id),
-          init: null
+          id: this.visitIdentifier(n.id)
         }))
       },
       id: this.visitIdentifier(node.id),
@@ -267,8 +315,7 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
         kind: 'Variable',
         type: this.visitType(node.type.computedType),
         id: this.visitIdentifier(node.id),
-        init: node.value !== null && this.mode !== OutputCPPMode.DEFINE_STRUCT ?
-          node.value.acceptExpressionVisitor(this) : null
+        init: node.value !== null ? node.value.acceptExpressionVisitor(this) : null
       }]
     };
   }
@@ -284,8 +331,7 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
     return {
       kind: 'UnaryExpression',
       operator: node.op,
-      argument: node.value.acceptExpressionVisitor(this),
-      prefix: true
+      argument: node.value.acceptExpressionVisitor(this)
     };
   }
 
@@ -312,7 +358,7 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
       kind: 'MemberExpression',
       operator: node.value.computedType.isPointer() ? '->' : '.',
       object: node.value.acceptExpressionVisitor(this),
-      property: this.visitIdentifier(node.id)
+      member: this.visitIdentifier(node.id)
     };
   }
 
