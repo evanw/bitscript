@@ -223,14 +223,34 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
     return from.acceptExpressionVisitor(this);
   }
 
+  declareFunction(node: FunctionDeclaration): Object {
+    return {
+      kind: 'FunctionDeclaration',
+      qualifiers: [],
+      type: {
+        kind: 'FunctionType',
+        'return': this.visitType(node.result.computedType),
+        'arguments': node.args.map(n => ({
+          kind: 'Variable',
+          type: this.visitType(n.type.computedType),
+          id: this.visitIdentifier(n.id)
+        }))
+      },
+      id: this.visitIdentifier(node.id),
+      body: null
+    };
+  }
+
   visitModule(node: Module): Object {
     var result: any = {
       kind: 'Program',
       body: flatten([
         node.block.statements.filter(n => n instanceof StructDeclaration).map(n => this.forwardDeclareType(n)),
         node.block.statements.filter(n => n instanceof StructDeclaration).map(n => this.declareType(n)),
+        node.block.statements.filter(n => n instanceof VariableDeclaration).map(n => n.acceptStatementVisitor(this)),
+        node.block.statements.filter(n => n instanceof FunctionDeclaration).map(n => this.declareFunction(n)),
         flatten(node.block.statements.filter(n => n instanceof StructDeclaration).map(n => this.implementType(n))),
-        node.block.statements.filter(n => !(n instanceof StructDeclaration)).map(n => n.acceptStatementVisitor(this))])
+        node.block.statements.filter(n => n instanceof FunctionDeclaration).map(n => n.acceptStatementVisitor(this))])
     };
 
     // Include headers as needed
