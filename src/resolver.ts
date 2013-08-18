@@ -217,6 +217,12 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
     }
   }
 
+  checkStorage(node: Expression) {
+    if (!node.computedType.isStorage()) {
+      semanticErrorBadStorage(this.log, node.range);
+    }
+  }
+
   ensureDeclarationIsInitialized(node: Declaration) {
     // Only initialize once (symbol should be set by block initialization)
     assert(node.symbol !== null);
@@ -471,6 +477,7 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
     if (node.isAssignment()) {
       this.checkImplicitCast(left, node.right);
       this.checkRValueToRef(left, node.right);
+      this.checkStorage(node.left);
       return;
     }
 

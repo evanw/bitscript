@@ -102,3 +102,7 @@ function semanticErrorNoBinaryOperator(log: Log, range: SourceRange, op: string,
 function semanticErrorExpectedReturnValue(log: Log, range: SourceRange, type: WrappedType) {
   log.error(range, 'return statement must return ' + type);
 }
+
+function semanticErrorBadStorage(log: Log, range: SourceRange) {
+  log.error(range, 'cannot store to this location');
+}
