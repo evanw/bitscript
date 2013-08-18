@@ -107,6 +107,7 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
   forwardDeclareConstructor(node: StructDeclaration): Object {
     var result: any = this.generateConstructor(node);
     result.id = this.visitIdentifier(node.id);
+    result.initializations = null;
     result.body = null;
     return result;
   }
