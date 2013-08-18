@@ -90,3 +90,11 @@ function semanticErrorNoMembers(log: Log, range: TRange, type: WrappedType) {
 function semanticErrorUnknownMemberSymbol(log: Log, range: TRange, name: string, type: WrappedType) {
   log.error(range, name + ' is not defined on ' + type);
 }
+
+function semanticErrorNoUnaryOperator(log: Log, range: TRange, op: string, type: WrappedType) {
+  log.error(range, 'no unary operator ' + op + ' for ' + type);
+}
+
+function semanticErrorNoBinaryOperator(log: Log, range: TRange, op: string, left: WrappedType, right: WrappedType) {
+  log.error(range, 'no binary operator ' + op + ' for ' + left + ' and ' + right);
+}

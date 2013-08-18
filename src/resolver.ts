@@ -68,7 +68,7 @@ class Initializer implements DeclarationVisitor<WrappedType> {
     type.constructorType = new FunctionType(null, node.block.statements
       .filter(n => n instanceof VariableDeclaration && n.value === null)
       .map(n => (this.resolver.ensureDeclarationIsInitialized(n), (<VariableDeclaration>n).symbol.type)));
-    return type.wrap(0);
+    return type.wrap(Modifier.STORAGE);
   }
 
   visitFunctionDeclaration(node: FunctionDeclaration): WrappedType {
@@ -86,7 +86,7 @@ class Initializer implements DeclarationVisitor<WrappedType> {
     });
     this.resolver.popContext();
 
-    return new FunctionType(node.result.computedType.wrapWith(Modifier.INSTANCE), args).wrap(Modifier.INSTANCE);
+    return new FunctionType(node.result.computedType.wrapWith(Modifier.INSTANCE), args).wrap(Modifier.INSTANCE | Modifier.STORAGE);
   }
 
   visitVariableDeclaration(node: VariableDeclaration): WrappedType {
@@ -300,7 +300,7 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
     }
 
     this.resolveAsExpression(node.test);
-    this.checkImplicitCast(SpecialType.BOOL.wrap(0), node.test);
+    this.checkImplicitCast(SpecialType.BOOL.wrap(Modifier.INSTANCE), node.test);
     this.visitBlock(node.thenBlock);
     if (node.elseBlock !== null) {
       this.visitBlock(node.elseBlock);
@@ -314,7 +314,7 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
     }
 
     this.resolveAsExpression(node.test);
-    this.checkImplicitCast(SpecialType.BOOL.wrap(0), node.test);
+    this.checkImplicitCast(SpecialType.BOOL.wrap(Modifier.INSTANCE), node.test);
     this.pushContext(this.context.cloneWithFlag(ResolverFlag.IN_LOOP));
     this.visitBlock(node.block);
     this.popContext();
@@ -400,21 +400,131 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
 
   visitUnaryExpression(node: UnaryExpression) {
     this.resolveAsExpression(node.value);
+
+    // Avoid reporting duplicate errors
+    var value: WrappedType = node.value.computedType;
+    if (value.isError()) {
+      return;
+    }
+
+    // Special-case primitive operators
+    if (value.isPrimitive()) {
+      var found: boolean = false;
+
+      switch (node.op) {
+        case '+':
+        case '-':
+          found = value.innerType === SpecialType.INT || value.innerType === SpecialType.DOUBLE;
+          break;
+
+        case '!':
+          found = value.innerType === SpecialType.BOOL;
+          break;
+
+        case '~':
+          found = value.innerType === SpecialType.INT;
+          break;
+
+        default:
+          assert(false);
+      }
+
+      // Don't use value because it may have modifiers in it (like Modifier.STORAGE)
+      if (found) {
+        node.computedType = value.innerType.wrap(Modifier.INSTANCE);
+        return;
+      }
+    }
+
+    semanticErrorNoUnaryOperator(this.log, node.range, node.op, value);
   }
 
   visitBinaryExpression(node: BinaryExpression) {
     this.resolveAsExpression(node.left);
     this.resolveAsExpression(node.right);
 
-    if (node.isAssignment()) {
-      this.checkImplicitCast(node.left.computedType, node.right);
-      this.checkRValueToRef(node.left.computedType, node.right);
+    // Avoid reporting duplicate errors
+    var left: WrappedType = node.left.computedType;
+    var right: WrappedType = node.right.computedType;
+    if (left.isError() || right.isError()) {
+      return;
     }
+
+    // Special-case assignment logic
+    if (node.isAssignment()) {
+      this.checkImplicitCast(left, node.right);
+      this.checkRValueToRef(left, node.right);
+      return;
+    }
+
+    // Handle equality separately
+    if ((node.op === '==' || node.op === '!=') && (TypeLogic.canImplicitlyConvert(left, right) || TypeLogic.canImplicitlyConvert(right, left))) {
+      node.computedType = SpecialType.BOOL.wrap(Modifier.INSTANCE);
+      return;
+    }
+
+    // Special-case primitive operators
+    if (left.isPrimitive() && right.isPrimitive()) {
+      var result: Type = null;
+
+      switch (node.op) {
+        case '+':
+        case '-':
+        case '*':
+        case '/':
+          if ((left.innerType === SpecialType.INT || left.innerType === SpecialType.DOUBLE) &&
+              (right.innerType === SpecialType.INT || right.innerType === SpecialType.DOUBLE)) {
+            result = left.innerType === SpecialType.INT && right.innerType === SpecialType.INT ? SpecialType.INT : SpecialType.DOUBLE;
+          }
+          break;
+
+        case '%':
+        case '<<':
+        case '>>':
+          if (left.innerType === SpecialType.INT && right.innerType === SpecialType.INT) {
+            result = SpecialType.INT;
+          }
+          break;
+
+        case '&':
+        case '|':
+        case '^':
+          if ((left.innerType === SpecialType.INT || left.innerType === SpecialType.DOUBLE) &&
+              (right.innerType === SpecialType.INT || right.innerType === SpecialType.DOUBLE)) {
+            result = SpecialType.INT;
+          }
+          break;
+
+        case '&&':
+        case '||':
+          if (left.innerType === SpecialType.BOOL && right.innerType === SpecialType.BOOL) {
+            result = SpecialType.BOOL;
+          }
+          break;
+
+        case '<':
+        case '>':
+        case '<=':
+        case '>=':
+          if ((left.innerType === SpecialType.INT || left.innerType === SpecialType.DOUBLE) &&
+              (right.innerType === SpecialType.INT || right.innerType === SpecialType.DOUBLE)) {
+            result = SpecialType.BOOL;
+          }
+          break;
+      }
+
+      if (result !== null) {
+        node.computedType = result.wrap(Modifier.INSTANCE);
+        return;
+      }
+    }
+
+    semanticErrorNoBinaryOperator(this.log, node.range, node.op, left, right);
   }
 
   visitTernaryExpression(node: TernaryExpression) {
     this.resolveAsExpression(node.value);
-    this.checkImplicitCast(SpecialType.BOOL.wrap(0), node.value);
+    this.checkImplicitCast(SpecialType.BOOL.wrap(Modifier.INSTANCE), node.value);
     this.resolveAsExpression(node.trueValue);
     this.resolveAsExpression(node.falseValue);
   }
