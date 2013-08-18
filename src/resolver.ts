@@ -325,7 +325,11 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
     // An "over" annotation is needed when overriding a symbol
     if (!node.symbol.isOver()) {
       semanticErrorModifierMissingOver(this.log, node.id.range, node.id.name);
+      return;
     }
+
+    // Mark the override
+    symbol.isOverridden = true;
   }
 
   initializeSymbol(symbol: Symbol, range: SourceRange): Symbol {

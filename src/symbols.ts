@@ -6,6 +6,7 @@ class Symbol {
   modifiers: number = 0;
   node: Declaration = null;
   enclosingObject: ObjectType = null;
+  isOverridden: boolean = false;
 
   constructor(
     public name: string,

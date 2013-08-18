@@ -1,5 +1,6 @@
 declare var cppcodegen: any;
 
+// TODO: This is messy, clean this up
 class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>, ExpressionVisitor<Object> {
   needMemoryHeader: boolean = false;
   returnType: WrappedType = null;
@@ -125,10 +126,13 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
             kind: 'VariableDeclaration',
             qualifiers: [],
             variables: [n]
-          }).concat(this.generateFunctionsForObjectType(node).map(n => {
-            n.id = n.id.member;
-            n.body = n.initializations = null;
-            return n;
+          }).concat(this.generateFunctionsForObjectType(node, (n, o) => {
+            if (n.symbol.isOverridden || n.symbol.isOver()) {
+              o.qualifiers = [{ kind: 'Identifier', name: 'virtual' }];
+            }
+            o.id = o.id.member;
+            o.body = o.initializations = null;
+            return o;
           }), !this.needsVirtualDestructor(node) ? [] : [
             this.generateEmptyVirtualDestructor(node)
           ])
@@ -205,7 +209,7 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
     };
   }
 
-  generateMemberFunctions(node: ObjectDeclaration): Object[] {
+  generateMemberFunctions(node: ObjectDeclaration, callback: (n: FunctionDeclaration, o: any) => Object): Object[] {
     var functions: FunctionDeclaration[] = <FunctionDeclaration[]>
       node.block.statements.filter(n => n instanceof FunctionDeclaration);
     return functions.map(n => {
@@ -215,12 +219,12 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
         inner: this.visitIdentifier(node.id),
         member: result.id
       };
-      return result;
+      return callback(n, result);
     });
   }
 
-  generateFunctionsForObjectType(node: ObjectDeclaration): any[] {
-    return [this.generateConstructor(node)].concat(this.generateMemberFunctions(node));
+  generateFunctionsForObjectType(node: ObjectDeclaration, callback: (n: FunctionDeclaration, o: any) => Object): any[] {
+    return [this.generateConstructor(node)].concat(this.generateMemberFunctions(node, callback));
   }
 
   insertImplicitConversion(from: Expression, to: WrappedType): Object {
@@ -305,7 +309,7 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
         objects.map(n => this.declareObjectType(n)),
         node.block.statements.filter(n => n instanceof VariableDeclaration).map(n => n.acceptStatementVisitor(this)),
         node.block.statements.filter(n => n instanceof FunctionDeclaration).map(n => this.declareFunction(n)),
-        flatten(objects.map(n => this.generateFunctionsForObjectType(n))),
+        flatten(objects.map(n => this.generateFunctionsForObjectType(n, (n, o) => o))),
         node.block.statements.filter(n => n instanceof FunctionDeclaration).map(n => n.acceptStatementVisitor(this)),
       ])
     };
