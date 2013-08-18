@@ -1,35 +1,29 @@
-class ResolverFlag {
-  static IN_LOOP: number = 1;
-  static IN_STRUCT: number = 2;
-  static IN_FUNCTION: number = 4;
-}
-
 class ResolverContext {
   constructor(
     public scope: Scope,
-    public flags: number,
-    public thisType: WrappedType,
-    public returnType: WrappedType) {
+    public enclosingLoop: boolean,
+    public enclosingStruct: StructType,
+    public enclosingFunction: FunctionType) {
   }
 
   inLoop(): boolean {
-    return (this.flags & ResolverFlag.IN_LOOP) !== 0;
+    return this.enclosingLoop;
   }
 
   inStruct(): boolean {
-    return (this.flags & ResolverFlag.IN_STRUCT) !== 0;
+    return this.enclosingStruct !== null;
   }
 
   inFunction(): boolean {
-    return (this.flags & ResolverFlag.IN_FUNCTION) !== 0;
+    return this.enclosingFunction !== null;
   }
 
   clone(): ResolverContext {
     return new ResolverContext(
       this.scope,
-      this.flags,
-      this.thisType,
-      this.returnType);
+      this.enclosingLoop,
+      this.enclosingStruct,
+      this.enclosingFunction);
   }
 
   cloneWithScope(scope: Scope) {
@@ -38,23 +32,21 @@ class ResolverContext {
     return clone;
   }
 
-  cloneWithFlag(flag: number) {
+  cloneForLoop() {
     var clone = this.clone();
-    clone.flags |= flag;
+    clone.enclosingLoop = true;
     return clone;
   }
 
-  cloneWithThisType(thisType: WrappedType) {
+  cloneForStruct(structType: StructType) {
     var clone = this.clone();
-    clone.flags |= ResolverFlag.IN_STRUCT;
-    clone.thisType = thisType;
+    clone.enclosingStruct = structType;
     return clone;
   }
 
-  cloneWithReturnType(returnType: WrappedType) {
+  cloneForFunction(functionType: FunctionType) {
     var clone = this.clone();
-    clone.flags |= ResolverFlag.IN_FUNCTION;
-    clone.returnType = returnType;
+    clone.enclosingFunction = functionType;
     return clone;
   }
 }
@@ -71,8 +63,15 @@ class Initializer implements DeclarationVisitor<WrappedType> {
     this.resolver.initializeBlock(node.block);
     this.resolver.popContext();
 
-    // Create the struct type including the constructor
+    // Create the struct type and set it as the parent of all child symbols
     var type: StructType = new StructType(node.symbol.name, node.block.scope);
+    node.block.statements.forEach(n => {
+      if (n instanceof Declaration) {
+        (<Declaration>n).symbol.enclosingStruct = type;
+      }
+    });
+
+    // Create the constructor type
     node.symbol.type = type.wrap(0); // Cheat and set this early before we initialize member variables
     type.constructorType = new FunctionType(null, node.block.statements
       .filter(n => n instanceof VariableDeclaration && n.value === null)
@@ -106,7 +105,7 @@ class Initializer implements DeclarationVisitor<WrappedType> {
 
 class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, ExpressionVisitor<void> {
   stack: ResolverContext[] = [];
-  context: ResolverContext = new ResolverContext(Resolver.createGlobalScope(), 0, null, null);
+  context: ResolverContext = new ResolverContext(Resolver.createGlobalScope(), false, null, null);
   isInitialized: { [uniqueID: number]: boolean } = {};
   definitionContext: { [uniqueID: number]: ResolverContext } = {};
   initializer: Initializer = new Initializer(this);
@@ -175,7 +174,7 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
   }
 
   // TODO: REMOVE THIS
-  // Maybe a value type is just a const owned type once const is added?
+  // Maybe a value type is just a "final" owned type once "final" is added?
   forbidValueTypesForNow(node: Expression) {
     if (node.computedType.isStruct() && !node.computedType.isPointer()) {
       this.log.error(node.range, 'value types are temporarily disabled because they have not been thought through (copy-constructors are needed)');
@@ -340,7 +339,7 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
 
     this.resolveAsExpression(node.test);
     this.checkImplicitCast(SpecialType.BOOL.wrap(Modifier.INSTANCE), node.test);
-    this.pushContext(this.context.cloneWithFlag(ResolverFlag.IN_LOOP));
+    this.pushContext(this.context.cloneForLoop());
     this.visitBlock(node.block);
     this.popContext();
   }
@@ -351,12 +350,13 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
       return;
     }
 
+    var returnType: WrappedType = this.context.enclosingFunction.result;
     if (node.value !== null) {
       this.resolveAsExpression(node.value);
-      this.checkImplicitCast(this.context.returnType, node.value);
-      this.checkRValueToRef(this.context.returnType, node.value);
-    } else if (!this.context.returnType.isVoid()) {
-      semanticErrorExpectedReturnValue(this.log, node.range, this.context.returnType);
+      this.checkImplicitCast(returnType, node.value);
+      this.checkRValueToRef(returnType, node.value);
+    } else if (!returnType.isVoid()) {
+      semanticErrorExpectedReturnValue(this.log, node.range, returnType);
     }
   }
 
@@ -385,7 +385,7 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
     }
 
     this.ensureDeclarationIsInitialized(node);
-    this.pushContext(this.context.cloneWithThisType(node.symbol.type.innerType.wrap(Modifier.INSTANCE | Modifier.REF)));
+    this.pushContext(this.context.cloneForStruct(node.symbol.type.asStruct()));
     this.visitBlock(node.block);
     this.popContext();
   }
@@ -398,7 +398,7 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
 
     this.ensureDeclarationIsInitialized(node);
     node.args.forEach(n => n.acceptDeclarationVisitor(this));
-    this.pushContext(this.context.cloneWithReturnType(node.symbol.type.asFunction().result));
+    this.pushContext(this.context.cloneForFunction(node.symbol.type.asFunction()));
     this.visitBlock(node.block);
     this.popContext();
 
@@ -604,7 +604,7 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
       return;
     }
 
-    node.computedType = this.context.thisType;
+    node.computedType = this.context.enclosingStruct.wrap(Modifier.INSTANCE | Modifier.REF);
   }
 
   visitCallExpression(node: CallExpression) {

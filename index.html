@@ -86,10 +86,10 @@ textarea:focus {
 struct Vector {
   double x;
   double y;
-}
 
-owned Vector add(ref Vector a, ref Vector b) {
-  return new Vector(a.x + a.x, b.y + b.y);
+  owned Vector add(ref Vector other) {
+    return new Vector(x + other.x, y + other.y);
+  }
 }
 
 struct Link {
@@ -106,8 +106,8 @@ int main() {
   a = b;
   b = c;
 
-  // Use owned pointers as raw pointers
-  shared Vector d = add(a, b);
+  // Convert an owned pointer to a raw pointer
+  shared Vector d = a.add(b);
 
   // Build a linked list and traverse it
   owned Link head = new Link(100);

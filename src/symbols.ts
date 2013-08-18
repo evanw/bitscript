@@ -1,5 +1,6 @@
 class Symbol {
   node: Declaration = null;
+  enclosingStruct: StructType = null;
 
   constructor(
     public name: string,

@@ -194,10 +194,23 @@ class OutputJS implements StatementVisitor<Object>, DeclarationVisitor<Object>, 
   }
 
   visitSymbolExpression(node: SymbolExpression): Object {
-    return {
+    var result: Object = {
       type: 'Identifier',
       name: node.name
     };
+
+    // Insert "this." before struct members
+    if (node.symbol.enclosingStruct !== null) {
+      return {
+        type: 'MemberExpression',
+        object: {
+          type: 'ThisExpression'
+        },
+        property: result
+      };
+    }
+
+    return result;
   }
 
   static INTEGER_OPS : { [op: string]: boolean } = {
