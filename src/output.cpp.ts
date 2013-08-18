@@ -447,8 +447,8 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
     return {
       kind: 'ConditionalExpression',
       test: node.value.acceptExpressionVisitor(this),
-      consequent: node.trueValue.acceptExpressionVisitor(this), // TODO: May need insertImplicitConversion
-      alternate: node.falseValue.acceptExpressionVisitor(this) // TODO: May need insertImplicitConversion
+      consequent: this.insertImplicitConversion(node.trueValue, node.computedType),
+      alternate: this.insertImplicitConversion(node.falseValue, node.computedType)
     };
   }
 

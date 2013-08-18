@@ -43,4 +43,25 @@ class TypeLogic {
     return TypeLogic.checkImplicitlyConversionTypes(from, to) &&
            TypeLogic.checkImplicitlyConversionModifiers(from, to);
   }
+
+  static commonImplicitType(a: WrappedType, b: WrappedType): WrappedType {
+    if (TypeLogic.canImplicitlyConvert(a, b)) return b;
+    if (TypeLogic.canImplicitlyConvert(b, a)) return a;
+    if (a.innerType instanceof ObjectType && b.innerType instanceof ObjectType) {
+      var oa: ObjectType = <ObjectType>a.innerType;
+      var ob: ObjectType = <ObjectType>b.innerType;
+      var base: ObjectType = TypeLogic.commonBaseType(oa, ob);
+      if (base !== null) {
+        if (a.isRawPointer() || b.isRawPointer()) {
+          return base.wrap(Modifier.INSTANCE);
+        }
+        if (a.isShared() || b.isShared()) {
+          return base.wrap(Modifier.INSTANCE | Modifier.SHARED);
+        }
+        assert(a.isOwned() && b.isOwned());
+        return base.wrap(Modifier.INSTANCE | Modifier.OWNED);
+      }
+    }
+    return null;
+  }
 }

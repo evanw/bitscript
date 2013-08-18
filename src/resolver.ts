@@ -567,7 +567,26 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
     this.checkImplicitCast(SpecialType.BOOL.wrap(Modifier.INSTANCE), node.value);
     this.resolveAsExpression(node.trueValue);
     this.resolveAsExpression(node.falseValue);
-    // TODO: Ensure trueValue and falseValue have a common implicit type
+
+    // Avoid reporting duplicate errors
+    var yes: WrappedType = node.trueValue.computedType;
+    var no: WrappedType = node.falseValue.computedType;
+    if (yes.isError() || no.isError()) {
+      return;
+    }
+
+    // Ensure both branches can implicitly convert to a common type
+    var commonType: WrappedType = TypeLogic.commonImplicitType(yes, no);
+    if (commonType === null) {
+      semanticErrorNoCommonType(this.log, spanRange(node.trueValue.range, node.falseValue.range), yes, no);
+      return;
+    }
+
+    // Prevent immediate deletion
+    this.checkRValueToRawPointer(commonType, node.trueValue);
+    this.checkRValueToRawPointer(commonType, node.falseValue);
+
+    node.computedType = commonType;
   }
 
   visitMemberExpression(node: MemberExpression) {

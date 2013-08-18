@@ -110,3 +110,7 @@ function semanticErrorBadStorage(log: Log, range: SourceRange) {
 function semanticErrorBadBaseType(log: Log, range: SourceRange, type: WrappedType) {
   log.error(range, 'cannot inherit from ' + type);
 }
+
+function semanticErrorNoCommonType(log: Log, range: SourceRange, a: WrappedType, b: WrappedType) {
+  log.error(range, 'no common type for ' + a + ' and ' + b);
+}
