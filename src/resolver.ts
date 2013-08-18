@@ -57,14 +57,38 @@ class Initializer implements DeclarationVisitor<WrappedType> {
   }
 
   visitObjectDeclaration(node: ObjectDeclaration): WrappedType {
-    // Create and populate the block scope
+    // Create the block scope
     node.block.scope = new Scope(this.resolver.context.scope);
+    var type: ObjectType = new ObjectType(node.symbol.name, node.block.scope);
+
+    // Find the base class if there is one
+    if (node.base !== null) {
+      this.resolver.resolveAsType(node.base);
+
+      // Avoid reporting duplicate errors
+      var baseType: WrappedType = node.base.computedType;
+      if (baseType.isError()) {
+        return SpecialType.ERROR.wrap(0);
+      }
+
+      // Can only inherit from objects
+      if (!baseType.isObject()) {
+        semanticErrorBadBaseType(this.resolver.log, node.range, baseType);
+        return SpecialType.ERROR.wrap(0);
+      }
+
+      // Base type is valid (no need to check for cycles since
+      // cycle detection is done for all declarations anyway)
+      type.baseType = baseType.asObject();
+      node.block.scope.baseParent = type.baseType.scope;
+    }
+
+    // Populate the block scope
     this.resolver.pushContext(this.resolver.context.cloneWithScope(node.block.scope));
     this.resolver.initializeBlock(node.block);
     this.resolver.popContext();
 
     // Create the object type and set it as the parent of all child symbols
-    var type: ObjectType = new ObjectType(node.symbol.name, node.block.scope);
     node.block.statements.forEach(n => {
       if (n instanceof Declaration) {
         (<Declaration>n).symbol.enclosingObject = type;

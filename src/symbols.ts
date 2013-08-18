@@ -11,6 +11,7 @@ class Symbol {
 
 class Scope {
   symbols: Symbol[] = [];
+  baseParent: Scope = null;
 
   constructor(
     public lexicalParent: Scope) {
@@ -26,6 +27,9 @@ class Scope {
     for (var i = 0; i < this.symbols.length; i++) {
       var symbol: Symbol = this.symbols[i];
       if (symbol.name === name) return symbol;
+    }
+    if (this.baseParent !== null) {
+      return this.baseParent.find(name);
     }
     return null;
   }

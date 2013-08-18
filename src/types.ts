@@ -49,6 +49,7 @@ class FunctionType extends Type {
 
 class ObjectType extends Type {
   constructorType: FunctionType = null;
+  baseType: ObjectType = null;
 
   constructor(
     public name: string,

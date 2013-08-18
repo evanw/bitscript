@@ -165,6 +165,7 @@ class ObjectDeclaration extends Declaration {
   constructor(
     range: SourceRange,
     id: Identifier,
+    public base: Expression,
     public block: Block) {
     super(range, id);
   }

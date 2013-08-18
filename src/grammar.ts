@@ -92,8 +92,12 @@ function parseStatement(context: ParserContext): Statement {
   // Object declaration
   if (context.eat('class')) {
     var id: Identifier = parseIdentifier(context); if (id === null) return null;
+    var base: Expression = null;
+    if (context.eat(':')) {
+      base = pratt.parse(context, Power.CALL); if (base === null) return null;
+    }
     var block: Block = parseBlock(context); if (block === null) return null;
-    return new ObjectDeclaration(context.spanSince(range), id, block);
+    return new ObjectDeclaration(context.spanSince(range), id, base, block);
   }
 
   // Disambiguate identifiers used in expressions from identifiers used

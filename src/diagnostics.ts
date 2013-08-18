@@ -106,3 +106,7 @@ function semanticErrorExpectedReturnValue(log: Log, range: SourceRange, type: Wr
 function semanticErrorBadStorage(log: Log, range: SourceRange) {
   log.error(range, 'cannot store to this location');
 }
+
+function semanticErrorBadBaseType(log: Log, range: SourceRange, type: WrappedType) {
+  log.error(range, 'cannot inherit from ' + type);
+}
