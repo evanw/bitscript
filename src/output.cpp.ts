@@ -48,7 +48,7 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
       name: (<ObjectType>type.innerType).name
     };
 
-    if (type.isRef()) {
+    if (type.isRawPointer()) {
       return {
         kind: 'PointerType',
         inner: result
@@ -231,7 +231,7 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
       };
     }
 
-    if ((from.computedType.isOwned() || from.computedType.isShared()) && to.isRef()) {
+    if ((from.computedType.isOwned() || from.computedType.isShared()) && to.isRawPointer()) {
       return {
         kind: 'CallExpression',
         callee: {

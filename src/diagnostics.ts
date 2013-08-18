@@ -54,7 +54,7 @@ function semanticErrorUnexpectedExpression(log: Log, range: SourceRange, type: W
 }
 
 function semanticErrorPointerModifierConflict(log: Log, range: SourceRange) {
-  log.error(range, 'can only use one of ref, shared, or owned');
+  log.error(range, 'cannot use both owned and shared');
 }
 
 function semanticErrorInvalidPointerModifier(log: Log, range: SourceRange, type: WrappedType) {
@@ -79,7 +79,7 @@ function semanticErrorArgumentCount(log: Log, range: SourceRange, expected: numb
     ' but found ' + found + ' argument' + (found === 1 ? '' : 's'));
 }
 
-function semanticErrorRValueToRef(log: Log, range: SourceRange) {
+function semanticErrorRValueToRawPointer(log: Log, range: SourceRange) {
   log.error(range, 'new object will be deleted immediately (store it somewhere with an owned or shared type instead)');
 }
 

@@ -13,7 +13,7 @@ class TypeLogic {
   }
 
   static checkImplicitlyConversionModifiers(from: WrappedType, to: WrappedType): boolean {
-    if (from.isRef() && to.isRef()) return true;
+    if (from.isRawPointer() && to.isRawPointer()) return true;
     if (from.isOwned() && to.isPointer()) return true;
     if (from.isShared() && to.isPointer() && !to.isOwned()) return true;
     if (from.isPrimitive() && to.isPrimitive()) return true;

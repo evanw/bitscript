@@ -55,8 +55,7 @@ function parseType(context: ParserContext): Expression {
   for (;;) {
     var token: Token = context.current();
     var modifier: number = 0;
-    if (context.eat('ref')) modifier = Modifier.REF;
-    else if (context.eat('owned')) modifier = Modifier.OWNED;
+    if (context.eat('owned')) modifier = Modifier.OWNED;
     else if (context.eat('shared')) modifier = Modifier.SHARED;
     else break;
     if (modifiers & modifier) syntaxErrorDuplicateModifier(context.log, token);

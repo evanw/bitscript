@@ -87,7 +87,7 @@ class Vector {
   double x;
   double y;
 
-  owned Vector add(ref Vector other) {
+  owned Vector add(Vector other) {
     return new Vector(x + other.x, y + other.y);
   }
 }
@@ -113,7 +113,7 @@ int main() {
   owned Link head = new Link(100);
   head.next = new Link(200);
   head.next.next = new Link(300);
-  ref Link link = head;
+  Link link = head;
   while (link != null) link = link.next;
 
   // Shared pointer creation is optimized with make_shared

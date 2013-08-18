@@ -2,20 +2,10 @@ test([
   'class Foo {}',
   'Foo foo = new Foo();',
 ], [
-  'error on line 2 of <stdin>: cannot convert from value of type owned Foo to value of type Foo',
+  'error on line 2 of <stdin>: new object will be deleted immediately (store it somewhere with an owned or shared type instead)',
   '',
   'Foo foo = new Foo();',
   '          ~~~~~~~~~',
-]);
-
-test([
-  'class Foo {}',
-  'ref Foo foo = new Foo();',
-], [
-  'error on line 2 of <stdin>: new object will be deleted immediately (store it somewhere with an owned or shared type instead)',
-  '',
-  'ref Foo foo = new Foo();',
-  '              ~~~~~~~~~',
 ]);
 
 test([
@@ -32,10 +22,10 @@ test([
 
 test([
   'class Foo {}',
-  'ref Foo foo;',
+  'Foo foo;',
   'owned Foo bar = foo;',
 ], [
-  'error on line 3 of <stdin>: cannot convert from value of type ref Foo to value of type owned Foo',
+  'error on line 3 of <stdin>: cannot convert from value of type Foo to value of type owned Foo',
   '',
   'owned Foo bar = foo;',
   '                ~~~',
@@ -43,10 +33,10 @@ test([
 
 test([
   'class Foo {}',
-  'ref Foo foo;',
+  'Foo foo;',
   'shared Foo bar = foo;',
 ], [
-  'error on line 3 of <stdin>: cannot convert from value of type ref Foo to value of type shared Foo',
+  'error on line 3 of <stdin>: cannot convert from value of type Foo to value of type shared Foo',
   '',
   'shared Foo bar = foo;',
   '                 ~~~',
@@ -67,7 +57,7 @@ test([
   'class Foo {}',
   'owned shared Foo foo = new Foo();',
 ], [
-  'error on line 2 of <stdin>: can only use one of ref, shared, or owned',
+  'error on line 2 of <stdin>: cannot use both owned and shared',
   '',
   'owned shared Foo foo = new Foo();',
   '~~~~~~~~~~~~~~~~',
@@ -75,7 +65,7 @@ test([
 
 test([
   'class Link {',
-  '  ref Link next; // Test circular types',
+  '  Link next; // Test circular types',
   '}',
 ], [
 ]);
@@ -83,18 +73,6 @@ test([
 test([
   'class Foo {}',
   'Foo foo() {',
-  '  return new Foo();',
-  '}',
-], [
-  'error on line 3 of <stdin>: cannot convert from value of type owned Foo to value of type Foo',
-  '',
-  '  return new Foo();',
-  '         ~~~~~~~~~',
-]);
-
-test([
-  'class Foo {}',
-  'ref Foo foo() {',
   '  return new Foo();',
   '}',
 ], [
@@ -123,7 +101,7 @@ test([
 test([
   'class Foo {}',
   'owned Foo foo() {}',
-  'ref Foo bar() {',
+  'Foo bar() {',
   '  return foo();',
   '}',
 ], [
@@ -136,7 +114,7 @@ test([
 test([
   'class Foo {}',
   'void bar(owned Foo foo) {',
-  '  ref Foo bar = foo;',
+  '  Foo bar = foo;',
   '}',
 ], [
 ]);

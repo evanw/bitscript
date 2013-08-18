@@ -1,9 +1,8 @@
 class Modifier {
-  static REF: number = 1; // Is a plain pointer
-  static OWNED: number = 2; // Is a unique pointer
-  static SHARED: number = 4; // Is a reference-counted pointer
-  static STORAGE: number = 8; // Can this be stored to (is this an L-value)?
-  static INSTANCE: number = 16; // Is this an instance of the type instead of the type itself?
+  static OWNED: number = 1; // Is a unique pointer
+  static SHARED: number = 2; // Is a reference-counted pointer
+  static STORAGE: number = 4; // Can this be stored to (is this an L-value)?
+  static INSTANCE: number = 8; // Is this an instance of the type instead of the type itself?
 }
 
 class Type {
@@ -69,10 +68,6 @@ class WrappedType {
     assert(innerType !== null);
   }
 
-  isRef(): boolean {
-    return (this.modifiers & Modifier.REF) !== 0;
-  }
-
   isOwned(): boolean {
     return (this.modifiers & Modifier.OWNED) !== 0;
   }
@@ -90,7 +85,11 @@ class WrappedType {
   }
 
   isPointer(): boolean {
-    return (this.modifiers & (Modifier.REF | Modifier.OWNED | Modifier.SHARED)) !== 0;
+    return this.isObject();
+  }
+
+  isRawPointer(): boolean {
+    return this.isPointer() && !this.isOwned() && !this.isShared();
   }
 
   isError(): boolean {
@@ -139,7 +138,6 @@ class WrappedType {
 
   asString(): string {
     return (
-      (this.modifiers & Modifier.REF ? 'ref ' : '') +
       (this.modifiers & Modifier.OWNED ? 'owned ' : '') +
       (this.modifiers & Modifier.SHARED ? 'shared ' : '') +
       this.innerType.asString()

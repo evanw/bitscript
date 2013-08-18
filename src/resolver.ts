@@ -173,15 +173,6 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
     }
   }
 
-  // TODO: REMOVE THIS
-  // Maybe a value type is just a "final" owned type once "final" is added?
-  forbidValueTypesForNow(node: Expression) {
-    if (node.computedType.isObject() && !node.computedType.isPointer()) {
-      this.log.error(node.range, 'value types are temporarily disabled because they have not been thought through (copy-constructors are needed)');
-      node.computedType = SpecialType.ERROR.wrap(0);
-    }
-  }
-
   define(node: Declaration) {
     // Cache the context used to define the node so that when it's initialized
     // we can pass the context at the definition instead of at the use
@@ -220,9 +211,9 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
     });
   }
 
-  checkRValueToRef(type: WrappedType, node: Expression) {
-    if (!node.computedType.isError() && type.isRef() && node.computedType.isOwned() && !node.computedType.isStorage()) {
-      semanticErrorRValueToRef(this.log, node.range);
+  checkRValueToRawPointer(type: WrappedType, node: Expression) {
+    if (!node.computedType.isError() && type.isRawPointer() && node.computedType.isOwned() && !node.computedType.isStorage()) {
+      semanticErrorRValueToRawPointer(this.log, node.range);
     }
   }
 
@@ -354,7 +345,7 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
     if (node.value !== null) {
       this.resolveAsExpression(node.value);
       this.checkImplicitCast(returnType, node.value);
-      this.checkRValueToRef(returnType, node.value);
+      this.checkRValueToRawPointer(returnType, node.value);
     } else if (!returnType.isVoid()) {
       semanticErrorExpectedReturnValue(this.log, node.range, returnType);
     }
@@ -401,9 +392,6 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
     this.pushContext(this.context.cloneForFunction(node.symbol.type.asFunction()));
     this.visitBlock(node.block);
     this.popContext();
-
-    // TODO: REMOVE THIS
-    this.forbidValueTypesForNow(node.result);
   }
 
   visitVariableDeclaration(node: VariableDeclaration) {
@@ -413,11 +401,8 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
     if (node.value !== null) {
       this.resolveAsExpression(node.value);
       this.checkImplicitCast(node.symbol.type, node.value);
-      this.checkRValueToRef(node.symbol.type, node.value);
+      this.checkRValueToRawPointer(node.symbol.type, node.value);
     }
-
-    // TODO: REMOVE THIS
-    this.forbidValueTypesForNow(node.type);
   }
 
   visitSymbolExpression(node: SymbolExpression) {
@@ -486,7 +471,7 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
     // Special-case assignment logic
     if (node.isAssignment()) {
       this.checkImplicitCast(left, node.right);
-      this.checkRValueToRef(left, node.right);
+      this.checkRValueToRawPointer(left, node.right);
       this.checkStorage(node.left);
       return;
     }
@@ -604,7 +589,7 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
       return;
     }
 
-    node.computedType = this.context.enclosingObject.wrap(Modifier.INSTANCE | Modifier.REF);
+    node.computedType = this.context.enclosingObject.wrap(Modifier.INSTANCE);
   }
 
   visitCallExpression(node: CallExpression) {
@@ -655,8 +640,8 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
       return;
     }
 
-    var all: number = node.modifiers & (Modifier.REF | Modifier.OWNED | Modifier.SHARED);
-    if (all !== Modifier.REF && all !== Modifier.OWNED && all !== Modifier.SHARED) {
+    var all: number = node.modifiers & (Modifier.OWNED | Modifier.SHARED);
+    if (all !== Modifier.OWNED && all !== Modifier.SHARED) {
       semanticErrorPointerModifierConflict(this.log, node.range);
       return;
     }
