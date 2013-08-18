@@ -76,11 +76,12 @@ class OutputJS implements StatementVisitor<Object>, DeclarationVisitor<Object>, 
   }
 
   visitIfStatement(node: IfStatement): Object {
+    var elseBlock: any = node.elseBlock !== null ? this.visitBlock(node.elseBlock) : null;
     return {
       type: 'IfStatement',
       test: node.test.acceptExpressionVisitor(this),
       consequent: this.visitBlock(node.thenBlock),
-      alternate: node.elseBlock !== null ? this.visitBlock(node.elseBlock) : null
+      alternate: elseBlock !== null && elseBlock.body.length === 1 && elseBlock.body[0].type === 'IfStatement' ? elseBlock.body[0] : elseBlock
     };
   }
 
