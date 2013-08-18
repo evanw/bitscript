@@ -8,6 +8,7 @@ class ResolverContext {
   constructor(
     public scope: Scope,
     public flags: number,
+    public thisType: WrappedType,
     public returnType: WrappedType) {
   }
 
@@ -27,6 +28,7 @@ class ResolverContext {
     return new ResolverContext(
       this.scope,
       this.flags,
+      this.thisType,
       this.returnType);
   }
 
@@ -39,6 +41,13 @@ class ResolverContext {
   cloneWithFlag(flag: number) {
     var clone = this.clone();
     clone.flags |= flag;
+    return clone;
+  }
+
+  cloneWithThisType(thisType: WrappedType) {
+    var clone = this.clone();
+    clone.flags |= ResolverFlag.IN_STRUCT;
+    clone.thisType = thisType;
     return clone;
   }
 
@@ -97,7 +106,7 @@ class Initializer implements DeclarationVisitor<WrappedType> {
 
 class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, ExpressionVisitor<void> {
   stack: ResolverContext[] = [];
-  context: ResolverContext = new ResolverContext(Resolver.createGlobalScope(), 0, null);
+  context: ResolverContext = new ResolverContext(Resolver.createGlobalScope(), 0, null, null);
   isInitialized: { [uniqueID: number]: boolean } = {};
   definitionContext: { [uniqueID: number]: ResolverContext } = {};
   initializer: Initializer = new Initializer(this);
@@ -166,6 +175,7 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
   }
 
   // TODO: REMOVE THIS
+  // Maybe a value type is just a const owned type once const is added?
   forbidValueTypesForNow(node: Expression) {
     if (node.computedType.isStruct() && !node.computedType.isPointer()) {
       this.log.error(node.range, 'value types are temporarily disabled because they have not been thought through (copy-constructors are needed)');
@@ -375,7 +385,7 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
     }
 
     this.ensureDeclarationIsInitialized(node);
-    this.pushContext(this.context.cloneWithFlag(ResolverFlag.IN_STRUCT));
+    this.pushContext(this.context.cloneWithThisType(node.symbol.type.innerType.wrap(Modifier.INSTANCE | Modifier.REF)));
     this.visitBlock(node.block);
     this.popContext();
   }
@@ -589,7 +599,12 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
   }
 
   visitThisExpression(node: ThisExpression) {
-    node.computedType = SpecialType.NULL.wrap(Modifier.INSTANCE); // TODO
+    if (!this.context.inStruct()) {
+      semanticErrorUnexpectedStatement(this.log, node.range, 'this expression');
+      return;
+    }
+
+    node.computedType = this.context.thisType;
   }
 
   visitCallExpression(node: CallExpression) {
