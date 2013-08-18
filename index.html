@@ -88,12 +88,38 @@ struct Vector {
   double y;
 }
 
-owned Vector Vector_add(ref Vector a, ref Vector b) {
+owned Vector add(ref Vector a, ref Vector b) {
   return new Vector(a.x + a.x, b.y + b.y);
 }
 
-double Vector_dot(ref Vector a, ref Vector b) {
-  return a.x * a.x + b.y * b.y;
+struct Link {
+  int data;
+  owned Link next = null;
+}
+
+int main() {
+  owned Vector a = new Vector(1, 2);
+  owned Vector b = new Vector(3, 4);
+
+  // Swap a and b
+  owned Vector c = a;
+  a = b;
+  b = c;
+
+  // Use owned pointers as raw pointers
+  shared Vector d = add(a, b);
+
+  // Build a linked list and traverse it
+  owned Link head = new Link(100);
+  head.next = new Link(200);
+  head.next.next = new Link(300);
+  ref Link link = head;
+  while (link != null) link = link.next;
+
+  // Shared pointer creation is optimized with make_shared
+  shared Vector foo = new Vector(1, 2);
+
+  return 0;
 }
 </textarea></div>
     </div>
@@ -155,10 +181,10 @@ function changed() {
     output.style.color = '#FFF';
     output.value = []
       .concat(compiler.log.diagnostics)
-      .concat(!compiler.log.hasErrors ? OutputJS.generate(compiler.module) + '\n' : [])
-      .concat(!compiler.log.hasErrors ? OutputCPP.generate(compiler.module) + '\n' : [])
-      .concat(compiler.module ? JSON.stringify(compiler.module, filter, 2) + '\n' : [])
-      .concat(compiler.tokens ? compiler.tokens.map(function(token) { return printToken(token, ''); }) : [])
+      .concat(!compiler.log.hasErrors ? '// JavaScript\n' + OutputJS.generate(compiler.module) + '\n' : [])
+      .concat(!compiler.log.hasErrors ? '// C++\n' + OutputCPP.generate(compiler.module) + '\n' : [])
+      .concat(compiler.module ? '// AST\n' + JSON.stringify(compiler.module, filter, 2) + '\n' : [])
+      .concat(compiler.tokens ? '// Tokens\n' + compiler.tokens.map(function(token) { return printToken(token, ''); }).join('\n') : [])
       .join('\n');
   } catch (e) {
     output.style.color = '#F00';

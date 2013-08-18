@@ -8,7 +8,7 @@ class ResolverContext {
   constructor(
     public scope: Scope,
     public flags: number,
-    public result: WrappedType) {
+    public returnType: WrappedType) {
   }
 
   inLoop(): boolean {
@@ -27,7 +27,7 @@ class ResolverContext {
     return new ResolverContext(
       this.scope,
       this.flags,
-      this.result);
+      this.returnType);
   }
 
   cloneWithScope(scope: Scope) {
@@ -42,10 +42,10 @@ class ResolverContext {
     return clone;
   }
 
-  cloneWithReturnType(result: WrappedType) {
+  cloneWithReturnType(returnType: WrappedType) {
     var clone = this.clone();
     clone.flags |= ResolverFlag.IN_FUNCTION;
-    clone.result = result;
+    clone.returnType = returnType;
     return clone;
   }
 }
@@ -210,6 +210,7 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
   }
 
   ensureDeclarationIsInitialized(node: Declaration) {
+    // Only initialize once (symbol should be set by block initialization)
     assert(node.symbol !== null);
     if (node.symbol.type !== null) {
       return;
@@ -328,10 +329,10 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
 
     if (node.value !== null) {
       this.resolveAsExpression(node.value);
-      this.checkImplicitCast(this.context.result, node.value);
-      this.checkRValueToRef(this.context.result, node.value);
-    } else if (!this.context.result.isVoid()) {
-      semanticErrorExpectedReturnValue(this.log, node.range, this.context.result);
+      this.checkImplicitCast(this.context.returnType, node.value);
+      this.checkRValueToRef(this.context.returnType, node.value);
+    } else if (!this.context.returnType.isVoid()) {
+      semanticErrorExpectedReturnValue(this.log, node.range, this.context.returnType);
     }
   }
 

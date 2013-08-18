@@ -1,8 +1,11 @@
 declare var cppcodegen: any;
 
 class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>, ExpressionVisitor<Object> {
+  needMemoryHeader: boolean = false;
+  returnType: WrappedType = null;
+
   static generate(node: Module): string {
-    return cppcodegen.generate(new OutputCPP().visitModule(node), { indent: '  ' }).trim();
+    return cppcodegen.generate(new OutputCPP().visitModule(node), { indent: '  ', nullptr: true }).trim();
   }
 
   defaultForType(type: WrappedType): Object {
@@ -40,11 +43,45 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
     }
 
     assert(type.innerType instanceof StructType);
-    var inner: Object = {
+    var result: Object = {
       kind: 'Identifier',
       name: (<StructType>type.innerType).name
     };
-    return type.isPointer() ? { kind: 'PointerType', inner: inner } : inner;
+
+    if (type.isRef()) {
+      return {
+        kind: 'PointerType',
+        inner: result
+      };
+    }
+
+    if (type.isOwned()) {
+      this.needMemoryHeader = true;
+      return {
+        kind: 'SpecializeTemplate',
+        template: {
+          kind: 'MemberType',
+          inner: { kind: 'Identifier', name: 'std' },
+          member: { kind: 'Identifier', name: 'unique_ptr' }
+        },
+        parameters: [result]
+      };
+    }
+
+    if (type.isShared()) {
+      this.needMemoryHeader = true;
+      return {
+        kind: 'SpecializeTemplate',
+        template: {
+          kind: 'MemberType',
+          inner: { kind: 'Identifier', name: 'std' },
+          member: { kind: 'Identifier', name: 'shared_ptr' }
+        },
+        parameters: [result]
+      };
+    }
+
+    return result;
   }
 
   forwardDeclareType(node: StructDeclaration): Object {
@@ -94,20 +131,6 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
                 'arguments': this.createVariables(variables.filter(n => n.value === null))
               },
               id: this.visitIdentifier(node.id)
-            },
-
-            // Forward-declare destructor
-            {
-              kind: 'FunctionDeclaration',
-              qualifiers: [],
-              type: {
-                kind: 'FunctionType',
-                'arguments': []
-              },
-              id: {
-                kind: 'Identifier',
-                name: '~' + node.id.name
-              }
             }
           )
         }
@@ -136,74 +159,72 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
         initializations: variables.map(n => ({
           kind: 'CallExpression',
           callee: this.visitIdentifier(n.id),
-          'arguments': [n.value !== null ? n.value.acceptExpressionVisitor(this) : this.visitIdentifier(n.id)]
+          'arguments': [n.value !== null ? this.insertImplicitConversion(n.value, n.symbol.type) : this.visitIdentifier(n.id)]
         })),
         body: {
           kind: 'BlockStatement',
           body: []
         }
-      },
-
-      // Implement destructor
-      {
-        kind: 'FunctionDeclaration',
-        qualifiers: [],
-        type: {
-          kind: 'FunctionType',
-          'arguments': []
-        },
-        id: {
-          kind: 'MemberType',
-          inner: this.visitIdentifier(node.id),
-          member: {
-            kind: 'Identifier',
-            name: '~' + node.id.name
-          }
-        },
-        body: {
-          kind: 'BlockStatement',
-          body: flatten(variables.map(n => {
-            if (n.symbol.type.isOwned()) {
-              return [{
-                kind: 'ExpressionStatement',
-                expression: {
-                  kind: 'UnaryExpression',
-                  operator: 'delete',
-                  argument: this.visitIdentifier(n.id)
-                }
-              }];
-            }
-
-            if (n.symbol.type.isShared()) {
-              return [{
-                kind: 'ExpressionStatement',
-                expression: {
-                  kind: 'CallExpression',
-                  callee: {
-                    kind: 'MemberType',
-                    inner: {
-                      kind: 'Identifier',
-                      name: 'bitscript'
-                    },
-                    member: {
-                      kind: 'Identifier',
-                      name: 'deref'
-                    }
-                  },
-                  'arguments': [this.visitIdentifier(n.id)]
-                }
-              }];
-            }
-
-            return [];
-          }))
-        }
       }
     ];
   }
 
+  insertImplicitConversion(from: Expression, to: WrappedType): Object {
+    if (from.computedType.isOwned() && to.isOwned() && from.computedType.isStorage()) {
+      return {
+        kind: 'CallExpression',
+        callee: {
+          kind: 'MemberType',
+          inner: { kind: 'Identifier', name: 'std' },
+          member: { kind: 'Identifier', name: 'move' }
+        },
+        arguments: [from.acceptExpressionVisitor(this)]
+      };
+    }
+
+    if (from.computedType.isOwned() && to.isShared()) {
+      if (from instanceof NewExpression) {
+        var node: NewExpression = <NewExpression>from;
+        var functionType: FunctionType = node.type.computedType.asStruct().constructorType;
+        return {
+          kind: 'CallExpression',
+          callee: {
+            kind: 'SpecializeTemplate',
+            template: {
+              kind: 'MemberType',
+              inner: { kind: 'Identifier', name: 'std' },
+              member: { kind: 'Identifier', name: 'make_shared' }
+            },
+            parameters: [this.visitType(to.innerType.wrap(0))]
+          },
+          arguments: node.args.map((n, i) => this.insertImplicitConversion(n, functionType.args[i]))
+        };
+      }
+      return {
+        kind: 'CallExpression',
+        callee: this.visitType(to),
+        arguments: [from.acceptExpressionVisitor(this)]
+      };
+    }
+
+    if ((from.computedType.isOwned() || from.computedType.isShared()) && to.isRef()) {
+      return {
+        kind: 'CallExpression',
+        callee: {
+          kind: 'MemberExpression',
+          operator: '.',
+          object: from.acceptExpressionVisitor(this),
+          member: { kind: 'Identifier', name: 'get' }
+        },
+        arguments: []
+      };
+    }
+
+    return from.acceptExpressionVisitor(this);
+  }
+
   visitModule(node: Module): Object {
-    return {
+    var result: any = {
       kind: 'Program',
       body: flatten([
         node.block.statements.filter(n => n instanceof StructDeclaration).map(n => this.forwardDeclareType(n)),
@@ -211,6 +232,16 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
         flatten(node.block.statements.filter(n => n instanceof StructDeclaration).map(n => this.implementType(n))),
         node.block.statements.filter(n => !(n instanceof StructDeclaration)).map(n => n.acceptStatementVisitor(this))])
     };
+
+    // Include headers as needed
+    if (this.needMemoryHeader) {
+      result.body.unshift({
+        kind: 'IncludeStatement',
+        text: '<memory>'
+      });
+    }
+
+    return result;
   }
 
   visitBlock(node: Block): Object {
@@ -254,7 +285,7 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
   visitReturnStatement(node: ReturnStatement): Object {
     return {
       kind: 'ReturnStatement',
-      argument: node.value !== null ? node.value.acceptExpressionVisitor(this) : null
+      argument: node.value !== null ? this.insertImplicitConversion(node.value, this.returnType) : null
     };
   }
 
@@ -280,6 +311,7 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
   }
 
   visitFunctionDeclaration(node: FunctionDeclaration): Object {
+    this.returnType = node.symbol.type.asFunction().result;
     return {
       kind: 'FunctionDeclaration',
       qualifiers: [],
@@ -305,7 +337,7 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
         kind: 'Variable',
         type: this.visitType(node.type.computedType),
         id: this.visitIdentifier(node.id),
-        init: node.value !== null ? node.value.acceptExpressionVisitor(this) : null
+        init: node.value !== null ? this.insertImplicitConversion(node.value, node.symbol.type) : null
       }]
     };
   }
@@ -330,7 +362,7 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
       kind: node.op === '=' ? 'AssignmentExpression' : 'BinaryExpression',
       operator: node.op,
       left: node.left.acceptExpressionVisitor(this),
-      right: node.right.acceptExpressionVisitor(this)
+      right: node.op === '=' ? this.insertImplicitConversion(node.right, node.left.computedType) : node.right.acceptExpressionVisitor(this)
     };
   }
 
@@ -338,8 +370,8 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
     return {
       kind: 'ConditionalExpression',
       test: node.value.acceptExpressionVisitor(this),
-      consequent: node.trueValue.acceptExpressionVisitor(this),
-      alternate: node.falseValue.acceptExpressionVisitor(this)
+      consequent: node.trueValue.acceptExpressionVisitor(this), // TODO: May need insertImplicitConversion
+      alternate: node.falseValue.acceptExpressionVisitor(this) // TODO: May need insertImplicitConversion
     };
   }
 
@@ -380,18 +412,32 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
   }
 
   visitCallExpression(node: CallExpression): Object {
+    var functionType: FunctionType = node.value.computedType.asFunction();
     return {
       kind: 'CallExpression',
       callee: node.value.acceptExpressionVisitor(this),
-      arguments: node.args.map(n => n.acceptExpressionVisitor(this))
+      arguments: node.args.map((n, i) => this.insertImplicitConversion(n, functionType.args[i]))
     };
   }
 
   visitNewExpression(node: NewExpression): Object {
+    var functionType: FunctionType = node.type.computedType.asStruct().constructorType;
     return {
-      kind: 'NewExpression',
-      callee: node.type.acceptExpressionVisitor(this),
-      arguments: node.args.map(n => n.acceptExpressionVisitor(this))
+      kind: 'CallExpression',
+      callee: {
+        kind: 'SpecializeTemplate',
+        template: {
+          kind: 'MemberType',
+          inner: { kind: 'Identifier', name: 'std' },
+          member: { kind: 'Identifier', name: 'unique_ptr' }
+        },
+        parameters: [node.type.acceptExpressionVisitor(this)]
+      },
+      arguments: [{
+        kind: 'NewExpression',
+        callee: node.type.acceptExpressionVisitor(this),
+        arguments: node.args.map((n, i) => this.insertImplicitConversion(n, functionType.args[i]))
+      }]
     };
   }
 
