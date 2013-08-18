@@ -198,6 +198,7 @@ var pratt: Pratt = new Pratt();
 
 // Literals
 pratt.literal('null', (context, token) => new NullExpression(token.range));
+pratt.literal('this', (context, token) => new ThisExpression(token.range));
 pratt.literal('INT', (context, token) => new IntExpression(token.range, 0 | token.text));
 pratt.literal('true', (context, token) => new BoolExpression(token.range, true));
 pratt.literal('false', (context, token) => new BoolExpression(token.range, false));

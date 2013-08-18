@@ -217,6 +217,7 @@ interface ExpressionVisitor<T> {
   visitBoolExpression(node: BoolExpression): T;
   visitDoubleExpression(node: DoubleExpression): T;
   visitNullExpression(node: NullExpression): T;
+  visitThisExpression(node: ThisExpression): T;
   visitCallExpression(node: CallExpression): T;
   visitNewExpression(node: NewExpression): T;
   visitModifierExpression(node: ModifierExpression): T;
@@ -350,6 +351,17 @@ class NullExpression extends Expression {
 
   acceptExpressionVisitor<T>(visitor: ExpressionVisitor<T>): T {
     return visitor.visitNullExpression(this);
+  }
+}
+
+class ThisExpression extends Expression {
+  constructor(
+    range: SourceRange) {
+    super(range);
+  }
+
+  acceptExpressionVisitor<T>(visitor: ExpressionVisitor<T>): T {
+    return visitor.visitThisExpression(this);
   }
 }
 

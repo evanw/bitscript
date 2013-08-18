@@ -455,6 +455,12 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
     };
   }
 
+  visitThisExpression(node: ThisExpression): Object {
+    return {
+      kind: 'ThisExpression'
+    };
+  }
+
   visitCallExpression(node: CallExpression): Object {
     var functionType: FunctionType = node.value.computedType.asFunction();
     return {

@@ -581,6 +581,10 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
     node.computedType = SpecialType.NULL.wrap(Modifier.INSTANCE | Modifier.OWNED);
   }
 
+  visitThisExpression(node: ThisExpression) {
+    node.computedType = SpecialType.NULL.wrap(Modifier.INSTANCE); // TODO
+  }
+
   visitCallExpression(node: CallExpression) {
     this.resolveAsExpression(node.value);
     node.args.forEach(n => this.resolveAsExpression(n));

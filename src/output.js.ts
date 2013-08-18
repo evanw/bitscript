@@ -322,6 +322,12 @@ class OutputJS implements StatementVisitor<Object>, DeclarationVisitor<Object>, 
     };
   }
 
+  visitThisExpression(node: ThisExpression): Object {
+    return {
+      type: 'ThisExpression'
+    };
+  }
+
   visitCallExpression(node: CallExpression): Object {
     return {
       type: 'CallExpression',
