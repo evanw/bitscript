@@ -22,7 +22,10 @@ class OutputJS implements StatementVisitor<Object>, DeclarationVisitor<Object>, 
   visitModule(node: Module): Object {
     var result: any = {
       type: 'Program',
-      body: node.block.statements.map(n => n.acceptStatementVisitor(this))
+      body: flatten([
+        flatten(node.block.statements.filter(n => n instanceof StructDeclaration).map(n => this.generateStructDeclaration(n))),
+        node.block.statements.filter(n => !(n instanceof StructDeclaration)).map(n => n.acceptStatementVisitor(this)),
+      ])
     };
 
     if (this.needMultiplicationPolyfill) {
@@ -102,7 +105,7 @@ class OutputJS implements StatementVisitor<Object>, DeclarationVisitor<Object>, 
     return node.acceptDeclarationVisitor(this);
   }
 
-  visitStructDeclaration(node: StructDeclaration): Object {
+  generateConstructor(node: StructDeclaration): Object {
     var variables: VariableDeclaration[] = <VariableDeclaration[]>
       node.block.statements.filter(n => n instanceof VariableDeclaration);
     return {
@@ -133,6 +136,40 @@ class OutputJS implements StatementVisitor<Object>, DeclarationVisitor<Object>, 
         })
       }
     };
+  }
+
+  generateMemberFunctions(node: StructDeclaration): Object[] {
+    return node.block.statements.filter(n => n instanceof FunctionDeclaration).map(n => {
+      var result: any = this.visitFunctionDeclaration(n);
+      result.type = 'FunctionExpression';
+      result.id = null;
+      return {
+        type: 'ExpressionStatement',
+        expression: {
+          type: 'AssignmentExpression',
+          operator: '=',
+          left: {
+            type: 'MemberExpression',
+            object: {
+              type: 'MemberExpression',
+              object: this.visitIdentifier(node.id),
+              property: { type: 'Identifier', name: 'prototype' }
+            },
+            property: this.visitIdentifier(n.id)
+          },
+          right: result
+        }
+      };
+    });
+  }
+
+  generateStructDeclaration(node: StructDeclaration): Object[] {
+    return [this.generateConstructor(node)].concat(this.generateMemberFunctions(node));
+  }
+
+  visitStructDeclaration(node: StructDeclaration): Object {
+    assert(false);
+    return null;
   }
 
   visitFunctionDeclaration(node: FunctionDeclaration): Object {

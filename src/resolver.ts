@@ -375,7 +375,7 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
   }
 
   visitFunctionDeclaration(node: FunctionDeclaration) {
-    if (this.context.inStruct() || this.context.inFunction()) {
+    if (this.context.inFunction()) {
       semanticErrorUnexpectedStatement(this.log, node.range, 'function declaration');
       return;
     }
