@@ -84,7 +84,7 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
     return result;
   }
 
-  forwardDeclareType(node: ObjectDeclaration): Object {
+  forwardDeclareObjectType(node: ObjectDeclaration): Object {
     return {
       kind: 'ObjectDeclaration',
       type: {
@@ -104,25 +104,12 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
     });
   }
 
-  forwardDeclareConstructor(node: ObjectDeclaration): Object {
-    var result: any = this.generateConstructor(node);
-    result.id = this.visitIdentifier(node.id);
-    result.initializations = null;
-    result.body = null;
-    return result;
+  needsVirtualDestructor(node: ObjectDeclaration): boolean {
+    var type: ObjectType = node.symbol.type.asObject();
+    return type.baseType === null && type.hasDerivedTypes;
   }
 
-  forwardDeclareMemberFunctions(node: ObjectDeclaration): Object[] {
-    var functions: FunctionDeclaration[] = <FunctionDeclaration[]>
-      node.block.statements.filter(n => n instanceof FunctionDeclaration);
-    return functions.map(n => {
-      var result: any = this.visitFunctionDeclaration(n);
-      result.body = null;
-      return result;
-    });
-  }
-
-  declareType(node: ObjectDeclaration): Object {
+  declareObjectType(node: ObjectDeclaration): Object {
     var variables: VariableDeclaration[] = <VariableDeclaration[]>
       node.block.statements.filter(n => n instanceof VariableDeclaration);
     return {
@@ -131,42 +118,86 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
         kind: 'ObjectType',
         keyword: 'struct',
         id: this.visitIdentifier(node.id),
-        bases: [],
+        bases: node.base === null ? [] : [node.base.acceptExpressionVisitor(this)],
         body: {
           kind: 'BlockStatement',
           body: this.createVariables(variables).map(n => <Object>{
             kind: 'VariableDeclaration',
             qualifiers: [],
             variables: [n]
-          }).concat(
-            this.forwardDeclareConstructor(node),
-            this.forwardDeclareMemberFunctions(node)
-          )
+          }).concat(this.generateFunctionsForObjectType(node).map(n => {
+            n.id = n.id.member;
+            n.body = n.initializations = null;
+            return n;
+          }), !this.needsVirtualDestructor(node) ? [] : [
+            this.generateEmptyVirtualDestructor(node)
+          ])
         }
       }
     };
   }
 
+  getBaseVariables(node: Expression): VariableDeclaration[] {
+    if (node instanceof SymbolExpression) {
+      var base: ObjectDeclaration = <ObjectDeclaration>(<SymbolExpression>node).symbol.node;
+      return this.getBaseVariables(base.base).concat(base.block.statements.filter(n => n instanceof VariableDeclaration));
+    }
+    return [];
+  }
+
   generateConstructor(node: ObjectDeclaration): Object {
     var variables: VariableDeclaration[] = <VariableDeclaration[]>
       node.block.statements.filter(n => n instanceof VariableDeclaration);
+    var baseVariables: VariableDeclaration[] = this.getBaseVariables(node.base);
+
+    // Initialize member variables using an initialization list
+    var initializations: Object[] = variables.map(n => ({
+      kind: 'CallExpression',
+      callee: this.visitIdentifier(n.id),
+      'arguments': [n.value !== null ? this.insertImplicitConversion(n.value, n.symbol.type) : this.visitIdentifier(n.id)]
+    }));
+
+    // Call the inherited constructor
+    if (node.base !== null) {
+      initializations.unshift({
+        kind: 'CallExpression',
+        callee: node.base.acceptExpressionVisitor(this),
+        'arguments': baseVariables.map(n => this.visitIdentifier(n.id))
+      });
+    }
+
+    // Create the constructor function
     return {
       kind: 'FunctionDeclaration',
       qualifiers: [],
       type: {
         kind: 'FunctionType',
-        'arguments': this.createVariables(variables.filter(n => n.value === null))
+        'arguments': this.createVariables(baseVariables.concat(variables.filter(n => n.value === null)))
       },
       id: {
         kind: 'MemberType',
         inner: this.visitIdentifier(node.id),
         member: this.visitIdentifier(node.id)
       },
-      initializations: variables.map(n => ({
-        kind: 'CallExpression',
-        callee: this.visitIdentifier(n.id),
-        'arguments': [n.value !== null ? this.insertImplicitConversion(n.value, n.symbol.type) : this.visitIdentifier(n.id)]
-      })),
+      initializations: initializations,
+      body: {
+        kind: 'BlockStatement',
+        body: []
+      }
+    };
+  }
+
+  generateEmptyVirtualDestructor(node: ObjectDeclaration): Object {
+    return {
+      kind: 'FunctionDeclaration',
+      type: {
+        kind: 'FunctionType',
+        'arguments': []
+      },
+      id: { kind: 'Identifier', name: '~' + node.id.name },
+      qualifiers: [
+        { kind: 'Identifier', name: 'virtual' }
+      ],
       body: {
         kind: 'BlockStatement',
         body: []
@@ -188,7 +219,7 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
     });
   }
 
-  implementType(node: ObjectDeclaration): Object[] {
+  generateFunctionsForObjectType(node: ObjectDeclaration): any[] {
     return [this.generateConstructor(node)].concat(this.generateMemberFunctions(node));
   }
 
@@ -219,7 +250,7 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
               inner: { kind: 'Identifier', name: 'std' },
               member: { kind: 'Identifier', name: 'make_shared' }
             },
-            parameters: [this.visitType(to.innerType.wrap(0))]
+            parameters: [{ kind: 'Identifier', name: to.asObject().name }]
           },
           arguments: node.args.map((n, i) => this.insertImplicitConversion(n, functionType.args[i]))
         };
@@ -266,14 +297,15 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
   }
 
   visitModule(node: Module): Object {
+    var objects: ObjectDeclaration[] = node.sortedObjectDeclarations();
     var result: any = {
       kind: 'Program',
       body: flatten([
-        node.block.statements.filter(n => n instanceof ObjectDeclaration).map(n => this.forwardDeclareType(n)),
-        node.block.statements.filter(n => n instanceof ObjectDeclaration).map(n => this.declareType(n)),
+        objects.map(n => this.forwardDeclareObjectType(n)),
+        objects.map(n => this.declareObjectType(n)),
         node.block.statements.filter(n => n instanceof VariableDeclaration).map(n => n.acceptStatementVisitor(this)),
         node.block.statements.filter(n => n instanceof FunctionDeclaration).map(n => this.declareFunction(n)),
-        flatten(node.block.statements.filter(n => n instanceof ObjectDeclaration).map(n => this.implementType(n))),
+        flatten(objects.map(n => this.generateFunctionsForObjectType(n))),
         node.block.statements.filter(n => n instanceof FunctionDeclaration).map(n => n.acceptStatementVisitor(this)),
       ])
     };

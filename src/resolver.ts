@@ -80,6 +80,7 @@ class Initializer implements DeclarationVisitor<WrappedType> {
       // Base type is valid (no need to check for cycles since
       // cycle detection is done for all declarations anyway)
       type.baseType = baseType.asObject();
+      type.baseType.hasDerivedTypes = true;
       node.block.scope.baseParent = type.baseType.scope;
     }
 
@@ -97,9 +98,11 @@ class Initializer implements DeclarationVisitor<WrappedType> {
 
     // Create the constructor type
     node.symbol.type = type.wrap(0); // Cheat and set this early before we initialize member variables
-    type.constructorType = new FunctionType(null, node.block.statements
+    var baseArgTypes: WrappedType[] = type.baseType !== null ? type.baseType.constructorType.args : [];
+    var argTypes: WrappedType[] = node.block.statements
       .filter(n => n instanceof VariableDeclaration && n.value === null)
-      .map(n => (this.resolver.ensureDeclarationIsInitialized(n), (<VariableDeclaration>n).symbol.type)));
+      .map(n => (this.resolver.ensureDeclarationIsInitialized(n), (<VariableDeclaration>n).symbol.type));
+    type.constructorType = new FunctionType(null, baseArgTypes.concat(argTypes));
     return type.wrap(0);
   }
 
@@ -564,6 +567,7 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
     this.checkImplicitCast(SpecialType.BOOL.wrap(Modifier.INSTANCE), node.value);
     this.resolveAsExpression(node.trueValue);
     this.resolveAsExpression(node.falseValue);
+    // TODO: Ensure trueValue and falseValue have a common implicit type
   }
 
   visitMemberExpression(node: MemberExpression) {

@@ -18,6 +18,17 @@ class Module extends AST {
     public block: Block) {
     super(range);
   }
+
+  // Sort objects so base objects come before derived objects
+  sortedObjectDeclarations(): ObjectDeclaration[] {
+    return <ObjectDeclaration[]>this.block.statements
+      .filter(n => n instanceof ObjectDeclaration)
+      .sort((a, b) => {
+        var A = a.symbol.type.asObject();
+        var B = b.symbol.type.asObject();
+        return +TypeLogic.isBaseTypeOf(A, B) - +TypeLogic.isBaseTypeOf(B, A);
+      });
+  }
 }
 
 class Identifier extends AST {

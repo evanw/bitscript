@@ -2,6 +2,7 @@ declare var esprima: any;
 declare var escodegen: any;
 
 class OutputJS implements StatementVisitor<Object>, DeclarationVisitor<Object>, ExpressionVisitor<Object> {
+  needExtendsPolyfill: boolean = false;
   needMultiplicationPolyfill: boolean = false;
 
   static generate(node: Module): string {
@@ -23,7 +24,7 @@ class OutputJS implements StatementVisitor<Object>, DeclarationVisitor<Object>, 
     var result: any = {
       type: 'Program',
       body: flatten([
-        flatten(node.block.statements.filter(n => n instanceof ObjectDeclaration).map(n => this.generateObjectDeclaration(n))),
+        flatten(node.sortedObjectDeclarations().map(n => this.generateObjectDeclaration(n))),
         node.block.statements.filter(n => !(n instanceof ObjectDeclaration)).map(n => n.acceptStatementVisitor(this)),
       ])
     };
@@ -35,6 +36,17 @@ class OutputJS implements StatementVisitor<Object>, DeclarationVisitor<Object>, 
         '    var al = a & 0xFFFF, bl = b & 0xFFFF;',
         '    return al * bl + ((a >>> 16) * bl + al * (b >>> 16) << 16) | 0;',
         '  };',
+        '}',
+      ].join('\n')));
+    }
+
+    if (this.needExtendsPolyfill) {
+      result.body.unshift(esprima.parse([
+        'function __extends(d, b) {',
+        '  function c() {}',
+        '  c.prototype = b.prototype;',
+        '  d.prototype = new c();',
+        '  d.prototype.constructor = d;',
         '}',
       ].join('\n')));
     }
@@ -105,13 +117,23 @@ class OutputJS implements StatementVisitor<Object>, DeclarationVisitor<Object>, 
     return node.acceptDeclarationVisitor(this);
   }
 
-  generateConstructor(node: ObjectDeclaration): Object {
+  getBaseVariables(node: Expression): VariableDeclaration[] {
+    if (node instanceof SymbolExpression) {
+      var base: ObjectDeclaration = <ObjectDeclaration>(<SymbolExpression>node).symbol.node;
+      return this.getBaseVariables(base.base).concat(base.block.statements.filter(n => n instanceof VariableDeclaration));
+    }
+    return [];
+  }
+
+  generateConstructor(node: ObjectDeclaration): Object[] {
     var variables: VariableDeclaration[] = <VariableDeclaration[]>
       node.block.statements.filter(n => n instanceof VariableDeclaration);
-    return {
+    var baseVariables: VariableDeclaration[] = this.getBaseVariables(node.base);
+
+    // Create the constructor function
+    var result: any[] = [{
       type: 'FunctionDeclaration',
-      params: variables
-        .filter(n => n.value === null)
+      params: baseVariables.concat(variables.filter(n => n.value === null))
         .map(n => { return this.visitIdentifier(n.id); }),
       id: this.visitIdentifier(node.id),
       body: {
@@ -135,7 +157,40 @@ class OutputJS implements StatementVisitor<Object>, DeclarationVisitor<Object>, 
           }
         })
       }
-    };
+    }];
+
+    // Inherit from the base class
+    if (node.base !== null) {
+      // Add a call to the constructor for the base class
+      result[0].body.body.unshift({
+        type: 'ExpressionStatement',
+        expression: {
+          type: 'CallExpression',
+          callee: {
+            type: 'MemberExpression',
+            object: node.base.acceptExpressionVisitor(this),
+            property: { type: 'Identifier', name: 'call' }
+          },
+          arguments: [{ type: 'ThisExpression' }].concat(baseVariables.map(n => this.visitIdentifier(n.id)))
+        }
+      });
+
+      // Add a call to __extends()
+      this.needExtendsPolyfill = true;
+      result.push({
+        type: 'ExpressionStatement',
+        expression: {
+          type: 'CallExpression',
+          callee: { type: 'Identifier', name: '__extends' },
+          arguments: [
+            this.visitIdentifier(node.id),
+            node.base.acceptExpressionVisitor(this)
+          ]
+        }
+      });
+    }
+
+    return result;
   }
 
   generateMemberFunctions(node: ObjectDeclaration): Object[] {
@@ -164,7 +219,7 @@ class OutputJS implements StatementVisitor<Object>, DeclarationVisitor<Object>, 
   }
 
   generateObjectDeclaration(node: ObjectDeclaration): Object[] {
-    return [this.generateConstructor(node)].concat(this.generateMemberFunctions(node));
+    return this.generateConstructor(node).concat(this.generateMemberFunctions(node));
   }
 
   visitObjectDeclaration(node: ObjectDeclaration): Object {

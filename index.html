@@ -97,6 +97,16 @@ class Link {
   owned Link next = null;
 }
 
+class B : A {
+  void bar() {}
+  int y;
+}
+
+class A {
+  void foo() {}
+  int x;
+}
+
 int main() {
   owned Vector a = new Vector(1, 2);
   owned Vector b = new Vector(3, 4);
@@ -118,6 +128,10 @@ int main() {
 
   // Shared pointer creation is optimized with make_shared
   shared Vector foo = new Vector(1, 2);
+
+  // Need generated virtual destructor here
+  owned B e = new B(1, 2);
+  owned A f = e;
 
   return 0;
 }
