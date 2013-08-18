@@ -84,7 +84,10 @@ class Initializer implements DeclarationVisitor<WrappedType> {
       // cycle detection is done for all declarations anyway)
       type.baseType = baseType.asObject();
       type.baseType.hasDerivedTypes = true;
-      node.block.scope.baseParent = type.baseType.scope;
+
+      // Mix the symbols from the base scope in with this block's symbols
+      // to make detecting abstract vs fully implemented types easier
+      node.block.scope.symbols = type.baseType.scope.symbols.slice(0);
     }
 
     // Populate the block scope
@@ -92,19 +95,23 @@ class Initializer implements DeclarationVisitor<WrappedType> {
     this.resolver.initializeBlock(node.block);
     this.resolver.popContext();
 
-    // Create the object type and set it as the parent of all child symbols
+    // Initialize all member variables now so we can inspect their types
+    node.symbol.type = type.wrap(0);
     node.block.statements.forEach(n => {
       if (n instanceof Declaration) {
         (<Declaration>n).symbol.enclosingObject = type;
+        this.resolver.ensureDeclarationIsInitialized(<Declaration>n);
       }
     });
 
+    // Determine whether the class is abstract
+    type.isAbstract = node.block.scope.containsAbstractSymbols();
+
     // Create the constructor type
-    node.symbol.type = type.wrap(0); // Cheat and set this early before we initialize member variables
     var baseArgTypes: WrappedType[] = type.baseType !== null ? type.baseType.constructorType.args : [];
     var argTypes: WrappedType[] = node.block.statements
       .filter(n => n instanceof VariableDeclaration && n.value === null)
-      .map(n => (this.resolver.ensureDeclarationIsInitialized(n), (<VariableDeclaration>n).symbol.type));
+      .map(n => (<VariableDeclaration>n).symbol.type);
     type.constructorType = new FunctionType(null, baseArgTypes.concat(argTypes));
     return type.wrap(0);
   }
@@ -112,11 +119,17 @@ class Initializer implements DeclarationVisitor<WrappedType> {
   visitFunctionDeclaration(node: FunctionDeclaration): WrappedType {
     this.resolver.resolveAsType(node.result);
 
+    // Determine whether the function is abstract
+    node.symbol.isAbstract = node.block === null;
+
     // Create the function scope
-    node.block.scope = new Scope(this.resolver.context.scope);
+    node.scope = new Scope(this.resolver.context.scope);
+    if (node.block !== null) {
+      node.block.scope = new Scope(node.scope);
+    }
 
     // Define the arguments in the function scope
-    this.resolver.pushContext(this.resolver.context.cloneWithScope(node.block.scope));
+    this.resolver.pushContext(this.resolver.context.cloneWithScope(node.scope));
     var args: WrappedType[] = node.args.map(n => {
       this.resolver.define(n);
       this.resolver.ensureDeclarationIsInitialized(n);
@@ -220,8 +233,8 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
 
     // Only add it to the scope if there isn't any conflict
     var symbol: Symbol = scope.find(node.id.name);
-    if (symbol === null) {
-      scope.symbols.push(node.symbol);
+    if (symbol === null || symbol.scope !== scope) {
+      scope.replace(node.symbol);
     } else {
       semanticErrorDuplicateSymbol(this.log, node.id.range, symbol);
     }
@@ -357,7 +370,7 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
   }
 
   findMemberSymbol(type: ObjectType, id: Identifier): Symbol {
-    var symbol: Symbol = type.scope.baseFind(id.name);
+    var symbol: Symbol = type.scope.find(id.name);
     return symbol === null ? null : this.initializeSymbol(symbol, id.range);
   }
 
@@ -479,9 +492,11 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
 
     this.ensureDeclarationIsInitialized(node);
     node.args.forEach(n => n.acceptDeclarationVisitor(this));
-    this.pushContext(this.context.cloneForFunction(node.symbol.type.asFunction()));
-    this.visitBlock(node.block);
-    this.popContext();
+    if (node.block !== null) {
+      this.pushContext(this.context.cloneForFunction(node.symbol.type.asFunction()));
+      this.visitBlock(node.block);
+      this.popContext();
+    }
   }
 
   visitVariableDeclaration(node: VariableDeclaration) {
@@ -735,6 +750,12 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
     var objectType: ObjectType = node.type.computedType.asObject();
     if (objectType === null) {
       semanticErrorInvalidNew(this.log, node.range, node.type.computedType);
+      return;
+    }
+
+    // Cannot construct an abstract class
+    if (objectType.isAbstract) {
+      semanticErrorAbstractNew(this.log, node.type);
       return;
     }
 

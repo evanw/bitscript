@@ -134,3 +134,7 @@ function semanticErrorOverrideNotFunctions(log: Log, range: SourceRange, name: s
 function semanticErrorOverrideDifferentTypes(log: Log, range: SourceRange, name: string, base: WrappedType, derived: WrappedType) {
   log.error(range, name + ' must have the same signature as the function it overrides (' + derived.asString() + ' overrides ' + base.asString() + ')');
 }
+
+function semanticErrorAbstractNew(log: Log, node: Expression) {
+  log.error(node.range, 'cannot use new on abstract ' + node.computedType);
+}

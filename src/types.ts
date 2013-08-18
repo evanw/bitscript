@@ -51,6 +51,7 @@ class ObjectType extends Type {
   constructorType: FunctionType = null;
   baseType: ObjectType = null;
   hasDerivedTypes: boolean = false;
+  isAbstract: boolean = false;
 
   constructor(
     public name: string,

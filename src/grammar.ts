@@ -131,7 +131,10 @@ function parseStatement(context: ParserContext): Statement {
     if (context.eat('(')) {
       var args: VariableDeclaration[] = parseArguments(context); if (args === null) return null;
       if (!context.expect(')')) return null;
-      var block: Block = parseBlock(context); if (block === null) return null;
+      var block: Block = null;
+      if (!context.eat(';')) {
+        block = parseBlock(context); if (block === null) return null;
+      }
       return new FunctionDeclaration(context.spanSince(range), id, modifiers, type, args, block);
     }
 

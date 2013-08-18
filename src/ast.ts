@@ -189,6 +189,10 @@ class ObjectDeclaration extends Declaration {
 }
 
 class FunctionDeclaration extends Declaration {
+  // Store a separate scope for the function arguments because the function
+  // may be abstract, in which case we can't use the scope of the body block
+  scope: Scope = null;
+
   constructor(
     range: SourceRange,
     id: Identifier,

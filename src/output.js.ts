@@ -233,7 +233,7 @@ class OutputJS implements StatementVisitor<Object>, DeclarationVisitor<Object>, 
       type: 'FunctionDeclaration',
       params: node.args.map(n => this.visitIdentifier(n.id)),
       id: this.visitIdentifier(node.id),
-      body: this.visitBlock(node.block)
+      body: node.block !== null ? this.visitBlock(node.block) : { type: 'BlockStatement', body: [] }
     };
   }
 

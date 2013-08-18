@@ -7,6 +7,7 @@ class Symbol {
   node: Declaration = null;
   enclosingObject: ObjectType = null;
   isOverridden: boolean = false;
+  isAbstract: boolean = false;
 
   constructor(
     public name: string,
@@ -21,10 +22,26 @@ class Symbol {
 
 class Scope {
   symbols: Symbol[] = [];
-  baseParent: Scope = null;
 
   constructor(
     public lexicalParent: Scope) {
+  }
+
+  containsAbstractSymbols(): boolean {
+    for (var i = 0; i < this.symbols.length; i++) {
+      if (this.symbols[i].isAbstract) return true;
+    }
+    return false;
+  }
+
+  replace(symbol: Symbol) {
+    for (var i = 0; i < this.symbols.length; i++) {
+      if (this.symbols[i].name === symbol.name) {
+        this.symbols[i] = symbol;
+        return;
+      }
+    }
+    this.symbols.push(symbol);
   }
 
   define(name: string, type: WrappedType): Symbol {
@@ -39,17 +56,6 @@ class Scope {
       if (symbol.name === name) {
         return symbol;
       }
-    }
-    return null;
-  }
-
-  baseFind(name: string): Symbol {
-    var symbol: Symbol = this.find(name);
-    if (symbol !== null) {
-      return symbol;
-    }
-    if (this.baseParent !== null) {
-      return this.baseParent.find(name);
     }
     return null;
   }

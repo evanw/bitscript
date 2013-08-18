@@ -127,11 +127,14 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
             qualifiers: [],
             variables: [n]
           }).concat(this.generateFunctionsForObjectType(node, (n, o) => {
-            if (n.symbol.isOverridden || n.symbol.isOver()) {
-              o.qualifiers = [{ kind: 'Identifier', name: 'virtual' }];
-            }
             o.id = o.id.member;
             o.body = o.initializations = null;
+            if (n.symbol.isOverridden || n.symbol.isOver()) {
+              o.qualifiers = [{ kind: 'Identifier', name: 'virtual' }];
+              if (n.block === null) {
+                o.body = { kind: 'IntegerLiteral', value: 0 };
+              }
+            }
             return o;
           }), !this.needsVirtualDestructor(node) ? [] : [
             this.generateEmptyVirtualDestructor(node)
@@ -220,7 +223,7 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
         member: result.id
       };
       return callback(n, result);
-    });
+    }).filter(n => n !== null);
   }
 
   generateFunctionsForObjectType(node: ObjectDeclaration, callback: (n: FunctionDeclaration, o: any) => Object): any[] {
@@ -309,8 +312,8 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
         objects.map(n => this.declareObjectType(n)),
         node.block.statements.filter(n => n instanceof VariableDeclaration).map(n => n.acceptStatementVisitor(this)),
         node.block.statements.filter(n => n instanceof FunctionDeclaration).map(n => this.declareFunction(n)),
-        flatten(objects.map(n => this.generateFunctionsForObjectType(n, (n, o) => o))),
-        node.block.statements.filter(n => n instanceof FunctionDeclaration).map(n => n.acceptStatementVisitor(this)),
+        flatten(objects.map(n => this.generateFunctionsForObjectType(n, (n, o) => n.block !== null ? o : null))),
+        node.block.statements.filter(n => n instanceof FunctionDeclaration && n.block !== null).map(n => n.acceptStatementVisitor(this)),
       ])
     };
 
@@ -407,7 +410,7 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
         }))
       },
       id: this.visitIdentifier(node.id),
-      body: this.visitBlock(node.block)
+      body: node.block !== null ? this.visitBlock(node.block) : null
     };
   }
 
