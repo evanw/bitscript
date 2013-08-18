@@ -171,6 +171,7 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
     scope.define('void', SpecialType.VOID.wrap(0));
     scope.define('bool', SpecialType.BOOL.wrap(0));
     scope.define('double', SpecialType.DOUBLE.wrap(0));
+    scope.define('Math', NativeTypes.MATH.wrap(TypeModifier.INSTANCE));
     return scope;
   }
 

@@ -6,6 +6,7 @@ SOURCES= \
 	src/tokens.ts \
 	src/types.ts \
 	src/symbols.ts \
+	src/nativetypes.ts \
 	src/ast.ts \
 	src/parser.ts \
 	src/grammar.ts \
