@@ -7,14 +7,14 @@ class AST {
   static nextUniqueID: number = 0;
 
   constructor(
-    public range: TRange) {
+    public range: SourceRange) {
     this.uniqueID = AST.nextUniqueID++;
   }
 }
 
 class Module extends AST {
   constructor(
-    range: TRange,
+    range: SourceRange,
     public block: Block) {
     super(range);
   }
@@ -22,7 +22,7 @@ class Module extends AST {
 
 class Identifier extends AST {
   constructor(
-    range: TRange,
+    range: SourceRange,
     public name: string) {
     super(range);
   }
@@ -32,7 +32,7 @@ class Block extends AST {
   scope: Scope = null;
 
   constructor(
-    range: TRange,
+    range: SourceRange,
     public statements: Statement[]) {
     super(range);
   }
@@ -61,7 +61,7 @@ class Statement extends AST {
 
 class ExpressionStatement extends Statement {
   constructor(
-    range: TRange,
+    range: SourceRange,
     public value: Expression) {
     super(range);
   }
@@ -73,7 +73,7 @@ class ExpressionStatement extends Statement {
 
 class IfStatement extends Statement {
   constructor(
-    range: TRange,
+    range: SourceRange,
     public test: Expression,
     public thenBlock: Block,
     public elseBlock: Block) {
@@ -87,7 +87,7 @@ class IfStatement extends Statement {
 
 class WhileStatement extends Statement {
   constructor(
-    range: TRange,
+    range: SourceRange,
     public test: Expression,
     public block: Block) {
     super(range);
@@ -100,7 +100,7 @@ class WhileStatement extends Statement {
 
 class ReturnStatement extends Statement {
   constructor(
-    range: TRange,
+    range: SourceRange,
     public value: Expression) {
     super(range);
   }
@@ -112,7 +112,7 @@ class ReturnStatement extends Statement {
 
 class BreakStatement extends Statement {
   constructor(
-    range: TRange) {
+    range: SourceRange) {
     super(range);
   }
 
@@ -123,7 +123,7 @@ class BreakStatement extends Statement {
 
 class ContinueStatement extends Statement {
   constructor(
-    range: TRange) {
+    range: SourceRange) {
     super(range);
   }
 
@@ -146,7 +146,7 @@ class Declaration extends Statement {
   symbol: Symbol = null;
 
   constructor(
-    range: TRange,
+    range: SourceRange,
     public id: Identifier) {
     super(range);
   }
@@ -163,7 +163,7 @@ class Declaration extends Statement {
 
 class StructDeclaration extends Declaration {
   constructor(
-    range: TRange,
+    range: SourceRange,
     id: Identifier,
     public block: Block) {
     super(range, id);
@@ -176,7 +176,7 @@ class StructDeclaration extends Declaration {
 
 class FunctionDeclaration extends Declaration {
   constructor(
-    range: TRange,
+    range: SourceRange,
     id: Identifier,
     public result: Expression,
     public args: VariableDeclaration[],
@@ -191,7 +191,7 @@ class FunctionDeclaration extends Declaration {
 
 class VariableDeclaration extends Declaration {
   constructor(
-    range: TRange,
+    range: SourceRange,
     id: Identifier,
     public type: Expression,
     public value: Expression) {
@@ -235,7 +235,7 @@ class SymbolExpression extends Expression {
   symbol: Symbol = null;
 
   constructor(
-    range: TRange,
+    range: SourceRange,
     public name: string) {
     super(range);
   }
@@ -247,7 +247,7 @@ class SymbolExpression extends Expression {
 
 class UnaryExpression extends Expression {
   constructor(
-    range: TRange,
+    range: SourceRange,
     public op: string,
     public value: Expression) {
     super(range);
@@ -260,7 +260,7 @@ class UnaryExpression extends Expression {
 
 class BinaryExpression extends Expression {
   constructor(
-    range: TRange,
+    range: SourceRange,
     public op: string,
     public left: Expression,
     public right: Expression) {
@@ -278,7 +278,7 @@ class BinaryExpression extends Expression {
 
 class TernaryExpression extends Expression {
   constructor(
-    range: TRange,
+    range: SourceRange,
     public value: Expression,
     public trueValue: Expression,
     public falseValue: Expression) {
@@ -294,7 +294,7 @@ class MemberExpression extends Expression {
   symbol: Symbol = null;
 
   constructor(
-    range: TRange,
+    range: SourceRange,
     public value: Expression,
     public id: Identifier) {
     super(range);
@@ -307,7 +307,7 @@ class MemberExpression extends Expression {
 
 class IntExpression extends Expression {
   constructor(
-    range: TRange,
+    range: SourceRange,
     public value: number) {
     super(range);
     assert(value === (0 | value));
@@ -320,7 +320,7 @@ class IntExpression extends Expression {
 
 class BoolExpression extends Expression {
   constructor(
-    range: TRange,
+    range: SourceRange,
     public value: boolean) {
     super(range);
   }
@@ -332,7 +332,7 @@ class BoolExpression extends Expression {
 
 class DoubleExpression extends Expression {
   constructor(
-    range: TRange,
+    range: SourceRange,
     public value: number) {
     super(range);
   }
@@ -344,7 +344,7 @@ class DoubleExpression extends Expression {
 
 class NullExpression extends Expression {
   constructor(
-    range: TRange) {
+    range: SourceRange) {
     super(range);
   }
 
@@ -355,7 +355,7 @@ class NullExpression extends Expression {
 
 class CallExpression extends Expression {
   constructor(
-    range: TRange,
+    range: SourceRange,
     public value: Expression,
     public args: Expression[]) {
     super(range);
@@ -368,7 +368,7 @@ class CallExpression extends Expression {
 
 class NewExpression extends Expression {
   constructor(
-    range: TRange,
+    range: SourceRange,
     public type: Expression,
     public args: Expression[]) {
     super(range);
@@ -381,7 +381,7 @@ class NewExpression extends Expression {
 
 class ModifierExpression extends Expression {
   constructor(
-    range: TRange,
+    range: SourceRange,
     public type: Expression,
     public modifiers: number) {
     super(range);

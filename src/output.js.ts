@@ -20,7 +20,7 @@ class OutputJS implements StatementVisitor<Object>, DeclarationVisitor<Object>, 
   }
 
   visitModule(node: Module): Object {
-    var result: Object = {
+    var result: any = {
       type: 'Program',
       body: node.block.statements.map(n => n.acceptStatementVisitor(this))
     };

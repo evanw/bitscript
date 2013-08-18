@@ -68,7 +68,7 @@ class Initializer implements DeclarationVisitor<WrappedType> {
     type.constructorType = new FunctionType(null, node.block.statements
       .filter(n => n instanceof VariableDeclaration && n.value === null)
       .map(n => (this.resolver.ensureDeclarationIsInitialized(n), (<VariableDeclaration>n).symbol.type)));
-    return type.wrap(Modifier.STORAGE);
+    return type.wrap(0);
   }
 
   visitFunctionDeclaration(node: FunctionDeclaration): WrappedType {
@@ -192,7 +192,7 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
     }
   }
 
-  checkCallArguments(range: TRange, type: FunctionType, args: Expression[]) {
+  checkCallArguments(range: SourceRange, type: FunctionType, args: Expression[]) {
     if (type.args.length !== args.length) {
       semanticErrorArgumentCount(this.log, range, type.args.length, args.length);
       return;
@@ -227,7 +227,7 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
     node.symbol.type = type;
   }
 
-  initializeSymbol(symbol: Symbol, range: TRange): Symbol {
+  initializeSymbol(symbol: Symbol, range: SourceRange): Symbol {
     // Only initialize the symbol once
     if (symbol.type === null) {
       assert(symbol.node !== null);
@@ -246,7 +246,7 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
     return symbol;
   }
 
-  findSymbol(range: TRange, name: string): Symbol {
+  findSymbol(range: SourceRange, name: string): Symbol {
     var symbol: Symbol = this.context.scope.lexicalFind(name);
     return symbol === null ? null : this.initializeSymbol(symbol, range);
   }
@@ -330,6 +330,8 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
       this.resolveAsExpression(node.value);
       this.checkImplicitCast(this.context.result, node.value);
       this.checkRValueToRef(this.context.result, node.value);
+    } else if (!this.context.result.isVoid()) {
+      semanticErrorExpectedReturnValue(this.log, node.range, this.context.result);
     }
   }
 
@@ -414,15 +416,15 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
       switch (node.op) {
         case '+':
         case '-':
-          found = value.innerType === SpecialType.INT || value.innerType === SpecialType.DOUBLE;
+          found = value.isInt() || value.isDouble();
           break;
 
         case '!':
-          found = value.innerType === SpecialType.BOOL;
+          found = value.isBool();
           break;
 
         case '~':
-          found = value.innerType === SpecialType.INT;
+          found = value.isInt();
           break;
 
         default:
@@ -472,9 +474,9 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
         case '-':
         case '*':
         case '/':
-          if ((left.innerType === SpecialType.INT || left.innerType === SpecialType.DOUBLE) &&
-              (right.innerType === SpecialType.INT || right.innerType === SpecialType.DOUBLE)) {
-            result = left.innerType === SpecialType.INT && right.innerType === SpecialType.INT ? SpecialType.INT : SpecialType.DOUBLE;
+          if ((left.isInt() || left.isDouble()) &&
+              (right.isInt() || right.isDouble())) {
+            result = left.isInt() && right.isInt() ? SpecialType.INT : SpecialType.DOUBLE;
           }
           break;
 
@@ -484,14 +486,14 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
         case '&':
         case '|':
         case '^':
-          if (left.innerType === SpecialType.INT && right.innerType === SpecialType.INT) {
+          if (left.isInt() && right.isInt()) {
             result = SpecialType.INT;
           }
           break;
 
         case '&&':
         case '||':
-          if (left.innerType === SpecialType.BOOL && right.innerType === SpecialType.BOOL) {
+          if (left.isBool() && right.isBool()) {
             result = SpecialType.BOOL;
           }
           break;
@@ -500,8 +502,8 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
         case '>':
         case '<=':
         case '>=':
-          if ((left.innerType === SpecialType.INT || left.innerType === SpecialType.DOUBLE) &&
-              (right.innerType === SpecialType.INT || right.innerType === SpecialType.DOUBLE)) {
+          if ((left.isInt() || left.isDouble()) &&
+              (right.isInt() || right.isDouble())) {
             result = SpecialType.BOOL;
           }
           break;

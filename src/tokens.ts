@@ -1,6 +1,6 @@
 class Token {
   constructor(
-    public range: TRange,
+    public range: SourceRange,
     public kind: string,
     public text: string) {
   }
@@ -57,7 +57,7 @@ function tokenize(log: Log, source: Source): Token[] {
       if (length > 0) {
         var start: Marker = new Marker(index, line, index + columnAdjust);
         var end: Marker = new Marker(index + length, line, index + length + columnAdjust);
-        syntaxErrorExtraData(log, new TRange(source, start, end), part);
+        syntaxErrorExtraData(log, new SourceRange(source, start, end), part);
       }
       index += length;
       continue;
@@ -80,12 +80,12 @@ function tokenize(log: Log, source: Source): Token[] {
     // Create the new token
     var start: Marker = new Marker(index, line, index + columnAdjust);
     var end: Marker = new Marker(index + length, line, index + length + columnAdjust);
-    tokens.push(new Token(new TRange(source, start, end), kind, part));
+    tokens.push(new Token(new SourceRange(source, start, end), kind, part));
     index += length;
   }
 
   // Every token stream ends in END
   var marker: Marker = new Marker(index, line, index + columnAdjust);
-  tokens.push(new Token(new TRange(source, marker, marker), 'END', ''));
+  tokens.push(new Token(new SourceRange(source, marker, marker), 'END', ''));
   return tokens;
 }

@@ -48,7 +48,7 @@ function parseIdentifier(context: ParserContext): Identifier {
 }
 
 function parseType(context: ParserContext): Expression {
-  var range: TRange = context.current().range;
+  var range: SourceRange = context.current().range;
 
   // Parse modifiers
   var modifiers: number = 0;
@@ -88,7 +88,7 @@ function parseStatements(context: ParserContext): Statement[] {
 }
 
 function parseStatement(context: ParserContext): Statement {
-  var range: TRange = context.current().range;
+  var range: SourceRange = context.current().range;
 
   // Struct statement
   if (context.eat('struct')) {
@@ -274,7 +274,7 @@ pratt.parselet('new', Power.LOWEST).prefix = context => {
 
 function parse(log: Log, tokens: Token[]): Module {
   var context: ParserContext = new ParserContext(log, tokens);
-  var range: TRange = context.current().range;
+  var range: SourceRange = context.current().range;
   var statements: Statement[] = parseStatements(context); if (statements === null) return null;
   if (!context.expect('END')) return null;
   range = context.spanSince(range);

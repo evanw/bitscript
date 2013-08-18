@@ -101,8 +101,24 @@ class WrappedType {
     return this.innerType === SpecialType.CIRCULAR;
   }
 
+  isVoid(): boolean {
+    return this.innerType === SpecialType.VOID;
+  }
+
+  isInt(): boolean {
+    return this.innerType === SpecialType.INT;
+  }
+
+  isDouble(): boolean {
+    return this.innerType === SpecialType.DOUBLE;
+  }
+
+  isBool(): boolean {
+    return this.innerType === SpecialType.BOOL;
+  }
+
   isPrimitive(): boolean {
-    return this.innerType === SpecialType.INT || this.innerType === SpecialType.DOUBLE || this.innerType === SpecialType.BOOL;
+    return this.isInt() || this.isDouble() || this.isBool();
   }
 
   isStruct(): boolean {

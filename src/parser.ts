@@ -1,6 +1,6 @@
-function spanRange(start: TRange, end: TRange): TRange {
+function spanRange(start: SourceRange, end: SourceRange): SourceRange {
   assert(start.source === end.source && start.start.index <= end.end.index);
-  return new TRange(start.source, start.start, end.end);
+  return new SourceRange(start.source, start.start, end.end);
 }
 
 class ParserContext {
@@ -21,7 +21,7 @@ class ParserContext {
     return token;
   }
 
-  spanSince(range: TRange): TRange {
+  spanSince(range: SourceRange): SourceRange {
     return spanRange(range, this.tokens[this.index > 0 ? this.index - 1 : 0].range);
   }
 

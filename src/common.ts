@@ -30,7 +30,7 @@ class Marker {
   }
 }
 
-class TRange {
+class SourceRange {
   constructor(
     public source: Source,
     public start: Marker,
@@ -41,7 +41,7 @@ class TRange {
 class Diagnostic {
   constructor(
     public type: string,
-    public range: TRange,
+    public range: SourceRange,
     public text: string) {
   }
 
@@ -61,12 +61,12 @@ class Log {
   diagnostics: Diagnostic[] = [];
   hasErrors: boolean = false;
 
-  error(range: TRange, text: string) {
+  error(range: SourceRange, text: string) {
     this.diagnostics.push(new Diagnostic('error', range, text));
     this.hasErrors = true;
   }
 
-  warning(range: TRange, text: string) {
+  warning(range: SourceRange, text: string) {
     this.diagnostics.push(new Diagnostic('warning', range, text));
   }
 }
