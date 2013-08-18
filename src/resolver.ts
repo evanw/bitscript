@@ -165,6 +165,14 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
     }
   }
 
+  // TODO: REMOVE THIS
+  forbidValueTypesForNow(node: Expression) {
+    if (node.computedType.isStruct() && !node.computedType.isPointer()) {
+      this.log.error(node.range, 'value types are temporarily disabled because they have not been thought through (copy-constructors are needed)');
+      node.computedType = SpecialType.ERROR.wrap(0);
+    }
+  }
+
   define(node: Declaration) {
     // Cache the context used to define the node so that when it's initialized
     // we can pass the context at the definition instead of at the use
@@ -377,6 +385,9 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
     this.pushContext(this.context.cloneWithReturnType(node.symbol.type.asFunction().result));
     this.visitBlock(node.block);
     this.popContext();
+
+    // TODO: REMOVE THIS
+    this.forbidValueTypesForNow(node.result);
   }
 
   visitVariableDeclaration(node: VariableDeclaration) {
@@ -388,6 +399,9 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
       this.checkImplicitCast(node.symbol.type, node.value);
       this.checkRValueToRef(node.symbol.type, node.value);
     }
+
+    // TODO: REMOVE THIS
+    this.forbidValueTypesForNow(node.type);
   }
 
   visitSymbolExpression(node: SymbolExpression) {
