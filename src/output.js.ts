@@ -25,7 +25,8 @@ class OutputJS implements StatementVisitor<Object>, DeclarationVisitor<Object>, 
       type: 'Program',
       body: flatten([
         flatten(node.sortedObjectDeclarations().map(n => this.generateObjectDeclaration(n))),
-        node.block.statements.filter(n => !(n instanceof ObjectDeclaration)).map(n => n.acceptStatementVisitor(this)),
+        node.block.statements.filter(n => n instanceof VariableDeclaration).map(n => n.acceptStatementVisitor(this)),
+        node.block.statements.filter(n => n instanceof FunctionDeclaration).map(n => n.acceptStatementVisitor(this)),
       ])
     };
 
@@ -356,6 +357,22 @@ class OutputJS implements StatementVisitor<Object>, DeclarationVisitor<Object>, 
   }
 
   visitMemberExpression(node: MemberExpression): Object {
+    if (node.value.computedType.innerType === NativeTypes.MATH) {
+      switch (node.id.name) {
+        case 'NAN':
+          return {
+            type: 'Identifier',
+            name: 'NaN'
+          };
+
+        case 'INFINITY':
+          return {
+            type: 'Identifier',
+            name: 'Infinity'
+          };
+      }
+    }
+
     return {
       type: 'MemberExpression',
       object: node.value.acceptExpressionVisitor(this),

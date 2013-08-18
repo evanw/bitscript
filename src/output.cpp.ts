@@ -3,6 +3,8 @@ declare var cppcodegen: any;
 // TODO: This is messy, clean this up
 class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>, ExpressionVisitor<Object> {
   needMemoryHeader: boolean = false;
+  needMathHeader: boolean = false;
+  needMathRandom: boolean = false;
   returnType: WrappedType = null;
 
   static generate(node: Module): string {
@@ -317,11 +319,54 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
       ])
     };
 
+    if (this.needMathRandom) {
+      result.body.unshift({
+        kind: 'FunctionDeclaration',
+        qualifiers: [],
+        type: {
+          kind: 'FunctionType',
+          'return': { kind: 'Identifier', name: 'double' },
+          'arguments': []
+        },
+        id: { kind: 'Identifier', name: 'Math_random' },
+        body: {
+          kind: 'BlockStatement',
+          body: [{
+            kind: 'ReturnStatement',
+            argument: {
+              kind: 'BinaryExpression',
+              operator: '/',
+              left: {
+                kind: 'CallExpression',
+                callee: { kind: 'Identifier', name: 'rand' },
+                arguments: []
+              },
+              right: {
+                kind: 'CallExpression',
+                callee: {
+                  kind: 'SpecializeTemplate',
+                  template: { kind: 'Identifier', name: 'static_cast' },
+                  parameters: [{ kind: 'Identifier', name: 'double' }]
+                },
+                arguments: [{ kind: 'Identifier', name: 'RAND_MAX' }]
+              }
+            }
+          }]
+        }
+      });
+    }
+
     // Include headers as needed
     if (this.needMemoryHeader) {
       result.body.unshift({
         kind: 'IncludeStatement',
         text: '<memory>'
+      });
+    }
+    if (this.needMathHeader) {
+      result.body.unshift({
+        kind: 'IncludeStatement',
+        text: '<math.h>'
       });
     }
 
@@ -461,6 +506,57 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
   }
 
   visitMemberExpression(node: MemberExpression): Object {
+    if (node.value.computedType.innerType === NativeTypes.MATH) {
+      switch (node.id.name) {
+        case 'E':
+          return {
+            kind: 'DoubleLiteral',
+            value: Math.E
+          };
+
+        case 'PI':
+          return {
+            kind: 'DoubleLiteral',
+            value: Math.PI
+          };
+
+        case 'NAN':
+        case 'INFINITY':
+        case 'cos':
+        case 'sin':
+        case 'tan':
+        case 'acos':
+        case 'asin':
+        case 'atan':
+        case 'atan2':
+        case 'floor':
+        case 'ceil':
+        case 'exp':
+        case 'log':
+        case 'sqrt':
+        case 'pow':
+          this.needMathHeader = true;
+          return this.visitIdentifier(node.id);
+
+        case 'min':
+        case 'max':
+        case 'abs':
+          this.needMathHeader = true;
+          return {
+            kind: 'Identifier',
+            name: 'f' + node.id.name
+          };
+
+        case 'random':
+          this.needMathHeader = true;
+          this.needMathRandom = true;
+          return {
+            kind: 'Identifier',
+            name: 'Math_random'
+          };
+      }
+    }
+
     return {
       kind: 'MemberExpression',
       operator: node.value.computedType.isPointer() ? '->' : '.',

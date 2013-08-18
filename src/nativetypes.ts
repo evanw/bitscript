@@ -6,7 +6,7 @@ class NativeTypes {
   }
 }
 
-// TODO: Use static functions to fix C++ generation when those work
+// TODO: Use static functions when those work
 NativeTypes.MATH.scope.define('E', SpecialType.DOUBLE.wrap(TypeModifier.INSTANCE));
 NativeTypes.MATH.scope.define('PI', SpecialType.DOUBLE.wrap(TypeModifier.INSTANCE));
 NativeTypes.MATH.scope.define('NAN', SpecialType.DOUBLE.wrap(TypeModifier.INSTANCE));
@@ -16,6 +16,7 @@ NativeTypes.MATH.scope.define('sin', NativeTypes.createFunction(SpecialType.DOUB
 NativeTypes.MATH.scope.define('tan', NativeTypes.createFunction(SpecialType.DOUBLE, [SpecialType.DOUBLE]));
 NativeTypes.MATH.scope.define('acos', NativeTypes.createFunction(SpecialType.DOUBLE, [SpecialType.DOUBLE]));
 NativeTypes.MATH.scope.define('asin', NativeTypes.createFunction(SpecialType.DOUBLE, [SpecialType.DOUBLE]));
+NativeTypes.MATH.scope.define('atan', NativeTypes.createFunction(SpecialType.DOUBLE, [SpecialType.DOUBLE]));
 NativeTypes.MATH.scope.define('atan2', NativeTypes.createFunction(SpecialType.DOUBLE, [SpecialType.DOUBLE, SpecialType.DOUBLE]));
 NativeTypes.MATH.scope.define('floor', NativeTypes.createFunction(SpecialType.DOUBLE, [SpecialType.DOUBLE]));
 NativeTypes.MATH.scope.define('ceil', NativeTypes.createFunction(SpecialType.DOUBLE, [SpecialType.DOUBLE]));
@@ -23,7 +24,7 @@ NativeTypes.MATH.scope.define('abs', NativeTypes.createFunction(SpecialType.DOUB
 NativeTypes.MATH.scope.define('log', NativeTypes.createFunction(SpecialType.DOUBLE, [SpecialType.DOUBLE]));
 NativeTypes.MATH.scope.define('exp', NativeTypes.createFunction(SpecialType.DOUBLE, [SpecialType.DOUBLE]));
 NativeTypes.MATH.scope.define('sqrt', NativeTypes.createFunction(SpecialType.DOUBLE, [SpecialType.DOUBLE]));
-NativeTypes.MATH.scope.define('pow', NativeTypes.createFunction(SpecialType.DOUBLE, [SpecialType.DOUBLE]));
+NativeTypes.MATH.scope.define('pow', NativeTypes.createFunction(SpecialType.DOUBLE, [SpecialType.DOUBLE, SpecialType.DOUBLE]));
 NativeTypes.MATH.scope.define('min', NativeTypes.createFunction(SpecialType.DOUBLE, [SpecialType.DOUBLE, SpecialType.DOUBLE]));
 NativeTypes.MATH.scope.define('max', NativeTypes.createFunction(SpecialType.DOUBLE, [SpecialType.DOUBLE, SpecialType.DOUBLE]));
 NativeTypes.MATH.scope.define('random', NativeTypes.createFunction(SpecialType.DOUBLE, []));
