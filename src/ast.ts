@@ -158,7 +158,8 @@ class Declaration extends Statement {
 
   constructor(
     range: SourceRange,
-    public id: Identifier) {
+    public id: Identifier,
+    public modifiers: number) {
     super(range);
   }
 
@@ -176,9 +177,10 @@ class ObjectDeclaration extends Declaration {
   constructor(
     range: SourceRange,
     id: Identifier,
+    modifiers: number,
     public base: Expression,
     public block: Block) {
-    super(range, id);
+    super(range, id, modifiers);
   }
 
   acceptDeclarationVisitor<T>(visitor: DeclarationVisitor<T>): T {
@@ -190,10 +192,11 @@ class FunctionDeclaration extends Declaration {
   constructor(
     range: SourceRange,
     id: Identifier,
+    modifiers: number,
     public result: Expression,
     public args: VariableDeclaration[],
     public block: Block) {
-    super(range, id);
+    super(range, id, modifiers);
   }
 
   acceptDeclarationVisitor<T>(visitor: DeclarationVisitor<T>): T {
@@ -205,9 +208,10 @@ class VariableDeclaration extends Declaration {
   constructor(
     range: SourceRange,
     id: Identifier,
+    modifiers: number,
     public type: Expression,
     public value: Expression) {
-    super(range, id);
+    super(range, id, modifiers);
   }
 
   acceptDeclarationVisitor<T>(visitor: DeclarationVisitor<T>): T {
@@ -232,7 +236,7 @@ interface ExpressionVisitor<T> {
   visitThisExpression(node: ThisExpression): T;
   visitCallExpression(node: CallExpression): T;
   visitNewExpression(node: NewExpression): T;
-  visitModifierExpression(node: ModifierExpression): T;
+  visitTypeModifierExpression(node: TypeModifierExpression): T;
 }
 
 class Expression extends AST {
@@ -403,7 +407,7 @@ class NewExpression extends Expression {
   }
 }
 
-class ModifierExpression extends Expression {
+class TypeModifierExpression extends Expression {
   constructor(
     range: SourceRange,
     public type: Expression,
@@ -412,6 +416,6 @@ class ModifierExpression extends Expression {
   }
 
   acceptExpressionVisitor<T>(visitor: ExpressionVisitor<T>): T {
-    return visitor.visitModifierExpression(this);
+    return visitor.visitTypeModifierExpression(this);
   }
 }

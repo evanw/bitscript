@@ -1,7 +1,20 @@
 class TypeLogic {
   static equal(a: Type, b: Type): boolean {
     if (a === b) return true;
+    if (a instanceof FunctionType && b instanceof FunctionType) {
+      var fa: FunctionType = <FunctionType>a;
+      var fb: FunctionType = <FunctionType>b;
+      return TypeLogic.equalWrapped(fa.result, fb.result) && TypeLogic.allEqualWrapped(fa.args, fb.args);
+    }
     return false;
+  }
+
+  static equalWrapped(a: WrappedType, b: WrappedType): boolean {
+    return TypeLogic.equal(a.innerType, b.innerType) && a.modifiers === b.modifiers;
+  }
+
+  static allEqualWrapped(a: WrappedType[], b: WrappedType[]): boolean {
+    return a.length === b.length && a.every((a, i) => TypeLogic.equalWrapped(a, b[i]));
   }
 
   static isBaseTypeOf(derived: ObjectType, base: ObjectType): boolean {
@@ -20,7 +33,11 @@ class TypeLogic {
     return null;
   }
 
-  static checkImplicitlyConversionTypes(from: WrappedType, to: WrappedType): boolean {
+  static isValidOverride(derived: WrappedType, base: WrappedType): boolean {
+    return derived.isFunction() && base.isFunction() && TypeLogic.equalWrapped(derived, base);
+  }
+
+  static checkImplicitConversionTypes(from: WrappedType, to: WrappedType): boolean {
     var f: Type = from.innerType;
     var t: Type = to.innerType;
     if (f === SpecialType.INT && t === SpecialType.DOUBLE) return true;
@@ -31,7 +48,7 @@ class TypeLogic {
     return TypeLogic.equal(f, t);
   }
 
-  static checkImplicitlyConversionModifiers(from: WrappedType, to: WrappedType): boolean {
+  static checkImplicitConversionTypeModifiers(from: WrappedType, to: WrappedType): boolean {
     if (from.isRawPointer() && to.isRawPointer()) return true;
     if (from.isOwned() && to.isPointer()) return true;
     if (from.isShared() && to.isPointer() && !to.isOwned()) return true;
@@ -40,8 +57,8 @@ class TypeLogic {
   }
 
   static canImplicitlyConvert(from: WrappedType, to: WrappedType): boolean {
-    return TypeLogic.checkImplicitlyConversionTypes(from, to) &&
-           TypeLogic.checkImplicitlyConversionModifiers(from, to);
+    return TypeLogic.checkImplicitConversionTypes(from, to) &&
+           TypeLogic.checkImplicitConversionTypeModifiers(from, to);
   }
 
   static commonImplicitType(a: WrappedType, b: WrappedType): WrappedType {
@@ -53,13 +70,13 @@ class TypeLogic {
       var base: ObjectType = TypeLogic.commonBaseType(oa, ob);
       if (base !== null) {
         if (a.isRawPointer() || b.isRawPointer()) {
-          return base.wrap(Modifier.INSTANCE);
+          return base.wrap(TypeModifier.INSTANCE);
         }
         if (a.isShared() || b.isShared()) {
-          return base.wrap(Modifier.INSTANCE | Modifier.SHARED);
+          return base.wrap(TypeModifier.INSTANCE | TypeModifier.SHARED);
         }
         assert(a.isOwned() && b.isOwned());
-        return base.wrap(Modifier.INSTANCE | Modifier.OWNED);
+        return base.wrap(TypeModifier.INSTANCE | TypeModifier.OWNED);
       }
     }
     return null;

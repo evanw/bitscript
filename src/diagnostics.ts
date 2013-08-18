@@ -114,3 +114,23 @@ function semanticErrorBadBaseType(log: Log, range: SourceRange, type: WrappedTyp
 function semanticErrorNoCommonType(log: Log, range: SourceRange, a: WrappedType, b: WrappedType) {
   log.error(range, 'no common type for ' + a + ' and ' + b);
 }
+
+function semanticErrorUnexpectedModifier(log: Log, range: SourceRange, modifier: string, why: string) {
+  log.error(range, 'cannot use the ' + modifier + ' modifier ' + why);
+}
+
+function semanticErrorModifierOverMissingBase(log: Log, range: SourceRange, name: string) {
+  log.error(range, name + ' has the "over" modifier but does not override anything');
+}
+
+function semanticErrorModifierMissingOver(log: Log, range: SourceRange, name: string) {
+  log.error(range, name + ' overrides another symbol with the same name but is missing the "over" modifier');
+}
+
+function semanticErrorOverrideNotFunctions(log: Log, range: SourceRange, name: string, base: ObjectType) {
+  log.error(range, name + ' overrides symbol with the same name in base class ' + base.asString());
+}
+
+function semanticErrorOverrideDifferentTypes(log: Log, range: SourceRange, name: string, base: WrappedType, derived: WrappedType) {
+  log.error(range, name + ' must have the same signature as the function it overrides (' + derived.asString() + ' overrides ' + base.asString() + ')');
+}

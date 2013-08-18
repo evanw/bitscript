@@ -1,8 +1,8 @@
-class Modifier {
-  static OWNED: number = 1; // Is a unique pointer
-  static SHARED: number = 2; // Is a reference-counted pointer
-  static STORAGE: number = 4; // Can this be stored to (is this an L-value)?
-  static INSTANCE: number = 8; // Is this an instance of the type instead of the type itself?
+enum TypeModifier {
+  OWNED = 1, // Is a unique pointer
+  SHARED = 2, // Is a reference-counted pointer
+  STORAGE = 4, // Can this be stored to (is this an L-value)?
+  INSTANCE = 8, // Is this an instance of the type instead of the type itself?
 }
 
 class Type {
@@ -71,19 +71,19 @@ class WrappedType {
   }
 
   isOwned(): boolean {
-    return (this.modifiers & Modifier.OWNED) !== 0;
+    return (this.modifiers & TypeModifier.OWNED) !== 0;
   }
 
   isShared(): boolean {
-    return (this.modifiers & Modifier.SHARED) !== 0;
+    return (this.modifiers & TypeModifier.SHARED) !== 0;
   }
 
   isStorage(): boolean {
-    return (this.modifiers & Modifier.STORAGE) !== 0;
+    return (this.modifiers & TypeModifier.STORAGE) !== 0;
   }
 
   isInstance(): boolean {
-    return (this.modifiers & Modifier.INSTANCE) !== 0;
+    return (this.modifiers & TypeModifier.INSTANCE) !== 0;
   }
 
   isPointer(): boolean {
@@ -140,14 +140,14 @@ class WrappedType {
 
   asString(): string {
     return (
-      (this.modifiers & Modifier.OWNED ? 'owned ' : '') +
-      (this.modifiers & Modifier.SHARED ? 'shared ' : '') +
+      (this.modifiers & TypeModifier.OWNED ? 'owned ' : '') +
+      (this.modifiers & TypeModifier.SHARED ? 'shared ' : '') +
       this.innerType.asString()
     );
   }
 
   toString(): string {
-    return (this.modifiers & Modifier.INSTANCE ? 'value of type ' : 'type ') + this.asString();
+    return (this.modifiers & TypeModifier.INSTANCE ? 'value of type ' : 'type ') + this.asString();
   }
 
   wrapWith(flag: number): WrappedType {

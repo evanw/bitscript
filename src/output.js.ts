@@ -413,7 +413,7 @@ class OutputJS implements StatementVisitor<Object>, DeclarationVisitor<Object>, 
     };
   }
 
-  visitModifierExpression(node: ModifierExpression): Object {
+  visitTypeModifierExpression(node: TypeModifierExpression): Object {
     assert(false);
     return null;
   }
