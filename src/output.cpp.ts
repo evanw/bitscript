@@ -42,10 +42,10 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
     case SpecialType.DOUBLE: return { kind: 'Identifier', name: 'double' };
     }
 
-    assert(type.innerType instanceof StructType);
+    assert(type.innerType instanceof ObjectType);
     var result: Object = {
       kind: 'Identifier',
-      name: (<StructType>type.innerType).name
+      name: (<ObjectType>type.innerType).name
     };
 
     if (type.isRef()) {
@@ -84,7 +84,7 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
     return result;
   }
 
-  forwardDeclareType(node: StructDeclaration): Object {
+  forwardDeclareType(node: ObjectDeclaration): Object {
     return {
       kind: 'ObjectDeclaration',
       type: {
@@ -104,7 +104,7 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
     });
   }
 
-  forwardDeclareConstructor(node: StructDeclaration): Object {
+  forwardDeclareConstructor(node: ObjectDeclaration): Object {
     var result: any = this.generateConstructor(node);
     result.id = this.visitIdentifier(node.id);
     result.initializations = null;
@@ -112,7 +112,7 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
     return result;
   }
 
-  forwardDeclareMemberFunctions(node: StructDeclaration): Object[] {
+  forwardDeclareMemberFunctions(node: ObjectDeclaration): Object[] {
     var functions: FunctionDeclaration[] = <FunctionDeclaration[]>
       node.block.statements.filter(n => n instanceof FunctionDeclaration);
     return functions.map(n => {
@@ -122,7 +122,7 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
     });
   }
 
-  declareType(node: StructDeclaration): Object {
+  declareType(node: ObjectDeclaration): Object {
     var variables: VariableDeclaration[] = <VariableDeclaration[]>
       node.block.statements.filter(n => n instanceof VariableDeclaration);
     return {
@@ -147,7 +147,7 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
     };
   }
 
-  generateConstructor(node: StructDeclaration): Object {
+  generateConstructor(node: ObjectDeclaration): Object {
     var variables: VariableDeclaration[] = <VariableDeclaration[]>
       node.block.statements.filter(n => n instanceof VariableDeclaration);
     return {
@@ -174,7 +174,7 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
     };
   }
 
-  generateMemberFunctions(node: StructDeclaration): Object[] {
+  generateMemberFunctions(node: ObjectDeclaration): Object[] {
     var functions: FunctionDeclaration[] = <FunctionDeclaration[]>
       node.block.statements.filter(n => n instanceof FunctionDeclaration);
     return functions.map(n => {
@@ -188,7 +188,7 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
     });
   }
 
-  implementType(node: StructDeclaration): Object[] {
+  implementType(node: ObjectDeclaration): Object[] {
     return [this.generateConstructor(node)].concat(this.generateMemberFunctions(node));
   }
 
@@ -208,7 +208,7 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
     if (from.computedType.isOwned() && to.isShared()) {
       if (from instanceof NewExpression) {
         var node: NewExpression = <NewExpression>from;
-        var functionType: FunctionType = node.type.computedType.asStruct().constructorType;
+        var functionType: FunctionType = node.type.computedType.asObject().constructorType;
         this.needMemoryHeader = true;
         return {
           kind: 'CallExpression',
@@ -269,11 +269,11 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
     var result: any = {
       kind: 'Program',
       body: flatten([
-        node.block.statements.filter(n => n instanceof StructDeclaration).map(n => this.forwardDeclareType(n)),
-        node.block.statements.filter(n => n instanceof StructDeclaration).map(n => this.declareType(n)),
+        node.block.statements.filter(n => n instanceof ObjectDeclaration).map(n => this.forwardDeclareType(n)),
+        node.block.statements.filter(n => n instanceof ObjectDeclaration).map(n => this.declareType(n)),
         node.block.statements.filter(n => n instanceof VariableDeclaration).map(n => n.acceptStatementVisitor(this)),
         node.block.statements.filter(n => n instanceof FunctionDeclaration).map(n => this.declareFunction(n)),
-        flatten(node.block.statements.filter(n => n instanceof StructDeclaration).map(n => this.implementType(n))),
+        flatten(node.block.statements.filter(n => n instanceof ObjectDeclaration).map(n => this.implementType(n))),
         node.block.statements.filter(n => n instanceof FunctionDeclaration).map(n => n.acceptStatementVisitor(this)),
       ])
     };
@@ -350,7 +350,7 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
     return node.acceptDeclarationVisitor(this);
   }
 
-  visitStructDeclaration(node: StructDeclaration): Object {
+  visitObjectDeclaration(node: ObjectDeclaration): Object {
     assert(false);
     return null;
   }
@@ -472,7 +472,7 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
   }
 
   visitNewExpression(node: NewExpression): Object {
-    var functionType: FunctionType = node.type.computedType.asStruct().constructorType;
+    var functionType: FunctionType = node.type.computedType.asObject().constructorType;
     this.needMemoryHeader = true;
     return {
       kind: 'CallExpression',

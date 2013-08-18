@@ -53,36 +53,32 @@ test([
 ]);
 
 test([
-  'struct Foo {',
-  '  struct Bar {}',
+  'class Foo {',
+  '  class Bar {}',
   '}',
 ], [
-  'error on line 2 of <stdin>: cannot use struct declaration here',
+  'error on line 2 of <stdin>: cannot use class declaration here',
   '',
-  '  struct Bar {}',
-  '  ~~~~~~~~~~~~~',
+  '  class Bar {}',
+  '  ~~~~~~~~~~~~',
 ]);
 
 test([
   'void foo() {',
-  '  struct Foo {}',
+  '  class Foo {}',
   '}',
 ], [
-  'error on line 2 of <stdin>: cannot use struct declaration here',
+  'error on line 2 of <stdin>: cannot use class declaration here',
   '',
-  '  struct Foo {}',
-  '  ~~~~~~~~~~~~~',
+  '  class Foo {}',
+  '  ~~~~~~~~~~~~',
 ]);
 
 test([
-  'struct Foo {',
+  'class Foo {',
   '  void foo() {}',
   '}',
 ], [
-  'error on line 2 of <stdin>: cannot use function declaration here',
-  '',
-  '  void foo() {}',
-  '  ~~~~~~~~~~~~~',
 ]);
 
 test([
@@ -171,14 +167,14 @@ test([
 ]);
 
 test([
-  'struct Foo {',
+  'class Foo {',
   '  int foo;',
   '}',
 ], [
 ]);
 
 test([
-  'struct Foo {',
+  'class Foo {',
   '  int foo = 100;',
   '}',
 ], [

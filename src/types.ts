@@ -48,7 +48,7 @@ class FunctionType extends Type {
   }
 }
 
-class StructType extends Type {
+class ObjectType extends Type {
   constructorType: FunctionType = null;
 
   constructor(
@@ -121,16 +121,16 @@ class WrappedType {
     return this.isInt() || this.isDouble() || this.isBool();
   }
 
-  isStruct(): boolean {
-    return this.innerType instanceof StructType;
+  isObject(): boolean {
+    return this.innerType instanceof ObjectType;
   }
 
   isFunction(): boolean {
     return this.innerType instanceof FunctionType;
   }
 
-  asStruct(): StructType {
-    return this.innerType instanceof StructType ? <StructType>this.innerType : null;
+  asObject(): ObjectType {
+    return this.innerType instanceof ObjectType ? <ObjectType>this.innerType : null;
   }
 
   asFunction(): FunctionType {

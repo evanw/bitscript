@@ -137,7 +137,7 @@ class ContinueStatement extends Statement {
 ////////////////////////////////////////////////////////////////////////////////
 
 interface DeclarationVisitor<T> {
-  visitStructDeclaration(node: StructDeclaration): T;
+  visitObjectDeclaration(node: ObjectDeclaration): T;
   visitFunctionDeclaration(node: FunctionDeclaration): T;
   visitVariableDeclaration(node: VariableDeclaration): T;
 }
@@ -161,7 +161,7 @@ class Declaration extends Statement {
   }
 }
 
-class StructDeclaration extends Declaration {
+class ObjectDeclaration extends Declaration {
   constructor(
     range: SourceRange,
     id: Identifier,
@@ -170,7 +170,7 @@ class StructDeclaration extends Declaration {
   }
 
   acceptDeclarationVisitor<T>(visitor: DeclarationVisitor<T>): T {
-    return visitor.visitStructDeclaration(this);
+    return visitor.visitObjectDeclaration(this);
   }
 }
 

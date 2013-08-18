@@ -90,11 +90,11 @@ function parseStatements(context: ParserContext): Statement[] {
 function parseStatement(context: ParserContext): Statement {
   var range: SourceRange = context.current().range;
 
-  // Struct statement
-  if (context.eat('struct')) {
+  // Object declaration
+  if (context.eat('class')) {
     var id: Identifier = parseIdentifier(context); if (id === null) return null;
     var block: Block = parseBlock(context); if (block === null) return null;
-    return new StructDeclaration(context.spanSince(range), id, block);
+    return new ObjectDeclaration(context.spanSince(range), id, block);
   }
 
   // Disambiguate identifiers used in expressions from identifiers used

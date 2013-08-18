@@ -2,7 +2,7 @@ class ResolverContext {
   constructor(
     public scope: Scope,
     public enclosingLoop: boolean,
-    public enclosingStruct: StructType,
+    public enclosingObject: ObjectType,
     public enclosingFunction: FunctionType) {
   }
 
@@ -10,8 +10,8 @@ class ResolverContext {
     return this.enclosingLoop;
   }
 
-  inStruct(): boolean {
-    return this.enclosingStruct !== null;
+  inObject(): boolean {
+    return this.enclosingObject !== null;
   }
 
   inFunction(): boolean {
@@ -22,7 +22,7 @@ class ResolverContext {
     return new ResolverContext(
       this.scope,
       this.enclosingLoop,
-      this.enclosingStruct,
+      this.enclosingObject,
       this.enclosingFunction);
   }
 
@@ -38,9 +38,9 @@ class ResolverContext {
     return clone;
   }
 
-  cloneForStruct(structType: StructType) {
+  cloneForObject(objectType: ObjectType) {
     var clone = this.clone();
-    clone.enclosingStruct = structType;
+    clone.enclosingObject = objectType;
     return clone;
   }
 
@@ -56,18 +56,18 @@ class Initializer implements DeclarationVisitor<WrappedType> {
     public resolver: Resolver) {
   }
 
-  visitStructDeclaration(node: StructDeclaration): WrappedType {
+  visitObjectDeclaration(node: ObjectDeclaration): WrappedType {
     // Create and populate the block scope
     node.block.scope = new Scope(this.resolver.context.scope);
     this.resolver.pushContext(this.resolver.context.cloneWithScope(node.block.scope));
     this.resolver.initializeBlock(node.block);
     this.resolver.popContext();
 
-    // Create the struct type and set it as the parent of all child symbols
-    var type: StructType = new StructType(node.symbol.name, node.block.scope);
+    // Create the object type and set it as the parent of all child symbols
+    var type: ObjectType = new ObjectType(node.symbol.name, node.block.scope);
     node.block.statements.forEach(n => {
       if (n instanceof Declaration) {
-        (<Declaration>n).symbol.enclosingStruct = type;
+        (<Declaration>n).symbol.enclosingObject = type;
       }
     });
 
@@ -176,7 +176,7 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
   // TODO: REMOVE THIS
   // Maybe a value type is just a "final" owned type once "final" is added?
   forbidValueTypesForNow(node: Expression) {
-    if (node.computedType.isStruct() && !node.computedType.isPointer()) {
+    if (node.computedType.isObject() && !node.computedType.isPointer()) {
       this.log.error(node.range, 'value types are temporarily disabled because they have not been thought through (copy-constructors are needed)');
       node.computedType = SpecialType.ERROR.wrap(0);
     }
@@ -275,7 +275,7 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
     return symbol === null ? null : this.initializeSymbol(symbol, range);
   }
 
-  findMemberSymbol(type: StructType, id: Identifier): Symbol {
+  findMemberSymbol(type: ObjectType, id: Identifier): Symbol {
     var symbol: Symbol = type.scope.find(id.name);
     return symbol === null ? null : this.initializeSymbol(symbol, id.range);
   }
@@ -378,14 +378,14 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
     node.acceptDeclarationVisitor(this);
   }
 
-  visitStructDeclaration(node: StructDeclaration) {
-    if (this.context.inStruct() || this.context.inFunction()) {
-      semanticErrorUnexpectedStatement(this.log, node.range, 'struct declaration');
+  visitObjectDeclaration(node: ObjectDeclaration) {
+    if (this.context.inObject() || this.context.inFunction()) {
+      semanticErrorUnexpectedStatement(this.log, node.range, 'class declaration');
       return;
     }
 
     this.ensureDeclarationIsInitialized(node);
-    this.pushContext(this.context.cloneForStruct(node.symbol.type.asStruct()));
+    this.pushContext(this.context.cloneForObject(node.symbol.type.asObject()));
     this.visitBlock(node.block);
     this.popContext();
   }
@@ -566,14 +566,14 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
     }
 
     // Only objects have members
-    var structType: StructType = node.value.computedType.asStruct();
-    if (structType === null) {
+    var objectType: ObjectType = node.value.computedType.asObject();
+    if (objectType === null) {
       semanticErrorNoMembers(this.log, node.value.range, node.value.computedType);
       return;
     }
 
     // Search for the symbol
-    node.symbol = this.findMemberSymbol(structType, node.id);
+    node.symbol = this.findMemberSymbol(objectType, node.id);
     if (node.symbol === null) {
       semanticErrorUnknownMemberSymbol(this.log, node.id.range, node.id.name, node.value.computedType);
       return;
@@ -599,12 +599,12 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
   }
 
   visitThisExpression(node: ThisExpression) {
-    if (!this.context.inStruct()) {
+    if (!this.context.inObject()) {
       semanticErrorUnexpectedStatement(this.log, node.range, 'this expression');
       return;
     }
 
-    node.computedType = this.context.enclosingStruct.wrap(Modifier.INSTANCE | Modifier.REF);
+    node.computedType = this.context.enclosingObject.wrap(Modifier.INSTANCE | Modifier.REF);
   }
 
   visitCallExpression(node: CallExpression) {
@@ -637,14 +637,14 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
     }
 
     // New only works on object types
-    var structType: StructType = node.type.computedType.asStruct();
-    if (structType === null) {
+    var objectType: ObjectType = node.type.computedType.asObject();
+    if (objectType === null) {
       semanticErrorInvalidNew(this.log, node.range, node.type.computedType);
       return;
     }
 
-    this.checkCallArguments(node.range, structType.constructorType, node.args);
-    node.computedType = structType.wrap(Modifier.INSTANCE | Modifier.OWNED);
+    this.checkCallArguments(node.range, objectType.constructorType, node.args);
+    node.computedType = objectType.wrap(Modifier.INSTANCE | Modifier.OWNED);
   }
 
   visitModifierExpression(node: ModifierExpression) {
@@ -661,7 +661,7 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
       return;
     }
 
-    if (all !== 0 && !node.type.computedType.isStruct()) {
+    if (all !== 0 && !node.type.computedType.isObject()) {
       semanticErrorInvalidPointerModifier(this.log, node.range, node.type.computedType);
       return;
     }

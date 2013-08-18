@@ -1,5 +1,5 @@
 test([
-  'struct Foo {}',
+  'class Foo {}',
   'Foo foo = new Foo();',
 ], [
   'error on line 2 of <stdin>: cannot convert from value of type owned Foo to value of type Foo',
@@ -9,7 +9,7 @@ test([
 ]);
 
 test([
-  'struct Foo {}',
+  'class Foo {}',
   'ref Foo foo = new Foo();',
 ], [
   'error on line 2 of <stdin>: new object will be deleted immediately (store it somewhere with an owned or shared type instead)',
@@ -19,19 +19,19 @@ test([
 ]);
 
 test([
-  'struct Foo {}',
+  'class Foo {}',
   'owned Foo foo = new Foo();',
 ], [
 ]);
 
 test([
-  'struct Foo {}',
+  'class Foo {}',
   'shared Foo foo = new Foo();',
 ], [
 ]);
 
 test([
-  'struct Foo {}',
+  'class Foo {}',
   'ref Foo foo;',
   'owned Foo bar = foo;',
 ], [
@@ -42,7 +42,7 @@ test([
 ]);
 
 test([
-  'struct Foo {}',
+  'class Foo {}',
   'ref Foo foo;',
   'shared Foo bar = foo;',
 ], [
@@ -53,7 +53,7 @@ test([
 ]);
 
 test([
-  'struct Foo {}',
+  'class Foo {}',
   'shared Foo foo;',
   'owned Foo bar = foo;',
 ], [
@@ -64,7 +64,7 @@ test([
 ]);
 
 test([
-  'struct Foo {}',
+  'class Foo {}',
   'owned shared Foo foo = new Foo();',
 ], [
   'error on line 2 of <stdin>: can only use one of ref, shared, or owned',
@@ -74,14 +74,14 @@ test([
 ]);
 
 test([
-  'struct Link {',
+  'class Link {',
   '  ref Link next; // Test circular types',
   '}',
 ], [
 ]);
 
 test([
-  'struct Foo {}',
+  'class Foo {}',
   'Foo foo() {',
   '  return new Foo();',
   '}',
@@ -93,7 +93,7 @@ test([
 ]);
 
 test([
-  'struct Foo {}',
+  'class Foo {}',
   'ref Foo foo() {',
   '  return new Foo();',
   '}',
@@ -105,7 +105,7 @@ test([
 ]);
 
 test([
-  'struct Foo {}',
+  'class Foo {}',
   'shared Foo foo() {',
   '  return new Foo();',
   '}',
@@ -113,7 +113,7 @@ test([
 ]);
 
 test([
-  'struct Foo {}',
+  'class Foo {}',
   'owned Foo foo() {',
   '  return new Foo();',
   '}',
@@ -121,7 +121,7 @@ test([
 ]);
 
 test([
-  'struct Foo {}',
+  'class Foo {}',
   'owned Foo foo() {}',
   'ref Foo bar() {',
   '  return foo();',
@@ -134,7 +134,7 @@ test([
 ]);
 
 test([
-  'struct Foo {}',
+  'class Foo {}',
   'void bar(owned Foo foo) {',
   '  ref Foo bar = foo;',
   '}',

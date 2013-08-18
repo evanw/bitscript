@@ -23,8 +23,8 @@ class OutputJS implements StatementVisitor<Object>, DeclarationVisitor<Object>, 
     var result: any = {
       type: 'Program',
       body: flatten([
-        flatten(node.block.statements.filter(n => n instanceof StructDeclaration).map(n => this.generateStructDeclaration(n))),
-        node.block.statements.filter(n => !(n instanceof StructDeclaration)).map(n => n.acceptStatementVisitor(this)),
+        flatten(node.block.statements.filter(n => n instanceof ObjectDeclaration).map(n => this.generateObjectDeclaration(n))),
+        node.block.statements.filter(n => !(n instanceof ObjectDeclaration)).map(n => n.acceptStatementVisitor(this)),
       ])
     };
 
@@ -105,7 +105,7 @@ class OutputJS implements StatementVisitor<Object>, DeclarationVisitor<Object>, 
     return node.acceptDeclarationVisitor(this);
   }
 
-  generateConstructor(node: StructDeclaration): Object {
+  generateConstructor(node: ObjectDeclaration): Object {
     var variables: VariableDeclaration[] = <VariableDeclaration[]>
       node.block.statements.filter(n => n instanceof VariableDeclaration);
     return {
@@ -138,7 +138,7 @@ class OutputJS implements StatementVisitor<Object>, DeclarationVisitor<Object>, 
     };
   }
 
-  generateMemberFunctions(node: StructDeclaration): Object[] {
+  generateMemberFunctions(node: ObjectDeclaration): Object[] {
     return node.block.statements.filter(n => n instanceof FunctionDeclaration).map(n => {
       var result: any = this.visitFunctionDeclaration(n);
       result.type = 'FunctionExpression';
@@ -163,11 +163,11 @@ class OutputJS implements StatementVisitor<Object>, DeclarationVisitor<Object>, 
     });
   }
 
-  generateStructDeclaration(node: StructDeclaration): Object[] {
+  generateObjectDeclaration(node: ObjectDeclaration): Object[] {
     return [this.generateConstructor(node)].concat(this.generateMemberFunctions(node));
   }
 
-  visitStructDeclaration(node: StructDeclaration): Object {
+  visitObjectDeclaration(node: ObjectDeclaration): Object {
     assert(false);
     return null;
   }
@@ -200,7 +200,7 @@ class OutputJS implements StatementVisitor<Object>, DeclarationVisitor<Object>, 
     };
 
     // Insert "this." before struct members
-    if (node.symbol.enclosingStruct !== null) {
+    if (node.symbol.enclosingObject !== null) {
       return {
         type: 'MemberExpression',
         object: {
