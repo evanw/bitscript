@@ -1,6 +1,9 @@
+declare var esprima: any;
 declare var escodegen: any;
 
 class OutputJS implements StatementVisitor<Object>, DeclarationVisitor<Object>, ExpressionVisitor<Object> {
+  needMultiplicationPolyfill: boolean = false;
+
   static generate(node: Module): string {
     return escodegen.generate(new OutputJS().visitModule(node), { format: { indent: { style: '  ' } } });
   }
@@ -17,10 +20,23 @@ class OutputJS implements StatementVisitor<Object>, DeclarationVisitor<Object>, 
   }
 
   visitModule(node: Module): Object {
-    return {
+    var result: Object = {
       type: 'Program',
       body: node.block.statements.map(n => n.acceptStatementVisitor(this))
     };
+
+    if (this.needMultiplicationPolyfill) {
+      result.body.unshift(esprima.parse([
+        'if (!Math.imul) {',
+        '  Math.imul = function(a, b) {',
+        '    var al = a & 0xFFFF, bl = b & 0xFFFF;',
+        '    return al * bl + ((a >>> 16) * bl + al * (b >>> 16) << 16) | 0;',
+        '  };',
+        '}',
+      ].join('\n')));
+    }
+
+    return result;
   }
 
   visitBlock(node: Block): Object {
@@ -147,17 +163,58 @@ class OutputJS implements StatementVisitor<Object>, DeclarationVisitor<Object>, 
     };
   }
 
+  static INTEGER_OPS : { [op: string]: boolean } = {
+    '~': true,
+    '|': true,
+    '&': true,
+    '^': true,
+    '<<': true,
+    '>>': true,
+  };
+
   visitUnaryExpression(node: UnaryExpression): Object {
-    return {
+    var result: Object = {
       type: 'UnaryExpression',
       operator: node.op,
       argument: node.value.acceptExpressionVisitor(this),
       prefix: true
     };
+
+    // Cast the result to an integer if needed (- -2147483648 is still -2147483648)
+    if (!OutputJS.INTEGER_OPS[node.op] && node.computedType.innerType === SpecialType.INT) {
+      result = {
+        type: 'BinaryExpression',
+        operator: '|',
+        left: result,
+        right: {
+          type: 'Literal',
+          value: 0
+        }
+      };
+    }
+
+    return result;
   }
 
   visitBinaryExpression(node: BinaryExpression): Object {
-    return {
+    // Special-case integer multiplication
+    if (node.op === '*' && node.computedType.innerType === SpecialType.INT) {
+      this.needMultiplicationPolyfill = true;
+      return {
+        type: 'CallExpression',
+        callee: {
+          type: 'MemberExpression',
+          object: { type: 'Identifier', name: 'Math' },
+          property: { type: 'Identifier', name: 'imul' }
+        },
+        'arguments': [
+          node.left.acceptExpressionVisitor(this),
+          node.right.acceptExpressionVisitor(this)
+        ]
+      };
+    }
+
+    var result: Object = {
       type:
         node.op === '=' ? 'AssignmentExpression' :
         node.op === '&&' || node.op === '||' ? 'LogicalExpression' :
@@ -166,6 +223,21 @@ class OutputJS implements StatementVisitor<Object>, DeclarationVisitor<Object>, 
       left: node.left.acceptExpressionVisitor(this),
       right: node.right.acceptExpressionVisitor(this)
     };
+
+    // Cast the result to an integer if needed (1073741824 + 1073741824 is -2147483648)
+    if (!OutputJS.INTEGER_OPS[node.op] && node.computedType.innerType === SpecialType.INT) {
+      result = {
+        type: 'BinaryExpression',
+        operator: '|',
+        left: result,
+        right: {
+          type: 'Literal',
+          value: 0
+        }
+      };
+    }
+
+    return result;
   }
 
   visitTernaryExpression(node: TernaryExpression): Object {
@@ -181,8 +253,7 @@ class OutputJS implements StatementVisitor<Object>, DeclarationVisitor<Object>, 
     return {
       type: 'MemberExpression',
       object: node.value.acceptExpressionVisitor(this),
-      property: this.visitIdentifier(node.id),
-      computed: false
+      property: this.visitIdentifier(node.id)
     };
   }
 

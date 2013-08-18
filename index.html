@@ -89,7 +89,11 @@ struct Vector {
 }
 
 owned Vector Vector_add(ref Vector a, ref Vector b) {
-  return new Vector(a.x + a.y, b.x + b.y);
+  return new Vector(a.x + a.x, b.y + b.y);
+}
+
+double Vector_dot(ref Vector a, ref Vector b) {
+  return a.x * a.x + b.y * b.y;
 }
 </textarea></div>
     </div>
@@ -100,6 +104,7 @@ owned Vector Vector_add(ref Vector a, ref Vector b) {
 
     <script src="node_modules/source-map-support/source-map-support.browser.js"></script>
     <script src="node_modules/cppcodegen/cppcodegen.js"></script>
+    <script src="node_modules/esprima/esprima.js"></script>
     <script src="escodegen.browser.js"></script>
     <script src="compiled.js"></script>
     <script>

@@ -481,16 +481,10 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
         case '%':
         case '<<':
         case '>>':
-          if (left.innerType === SpecialType.INT && right.innerType === SpecialType.INT) {
-            result = SpecialType.INT;
-          }
-          break;
-
         case '&':
         case '|':
         case '^':
-          if ((left.innerType === SpecialType.INT || left.innerType === SpecialType.DOUBLE) &&
-              (right.innerType === SpecialType.INT || right.innerType === SpecialType.DOUBLE)) {
+          if (left.innerType === SpecialType.INT && right.innerType === SpecialType.INT) {
             result = SpecialType.INT;
           }
           break;

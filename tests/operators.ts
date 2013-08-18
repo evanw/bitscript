@@ -167,7 +167,7 @@ test([
   ]);
 });
 
-['%', '<<', '>>'].map(op => {
+['%', '<<', '>>', '|', '&', '^'].map(op => {
   var tildes = op.replace(/./g, '~');
 
   test([
@@ -195,35 +195,6 @@ test([
     '',
     'bool foo = 1.5 ' + op + ' 1;',
     '           ~~~~~~' + tildes,
-  ]);
-});
-
-['|', '&', '^'].map(op => {
-  test([
-    'bool foo = 1 ' + op + ' 1;',
-  ], [
-    'error on line 1 of <stdin>: cannot convert from value of type int to value of type bool',
-    '',
-    'bool foo = 1 ' + op + ' 1;',
-    '           ~~~~~',
-  ]);
-
-  test([
-    'bool foo = 1 ' + op + ' 1.5;',
-  ], [
-    'error on line 1 of <stdin>: cannot convert from value of type int to value of type bool',
-    '',
-    'bool foo = 1 ' + op + ' 1.5;',
-    '           ~~~~~~~',
-  ]);
-
-  test([
-    'bool foo = 1.5 ' + op + ' 1;',
-  ], [
-    'error on line 1 of <stdin>: cannot convert from value of type int to value of type bool',
-    '',
-    'bool foo = 1.5 ' + op + ' 1;',
-    '           ~~~~~~~',
   ]);
 });
 
