@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>Compiler Debugger</title>
+    <style>
+
+body {
+  position: fixed;
+  left: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  overflow: hidden;
+  margin: 0;
+}
+
+#topbar {
+  position: absolute;
+  left: 0;
+  top: 0;
+  right: 0;
+  height: 39px;
+  line-height: 39px;
+  text-align: center;
+  background: #EEE;
+  border-bottom: 1px solid #777;
+}
+
+.button {
+  margin: 0;
+  display: inline-block;
+  background: #DDD;
+  background: linear-gradient(#FFF, #C7C7C7);
+  border: 1px solid #777;
+  border-left: none;
+  font: 14px/24px 'Helvetica Neue', Helvetica, sans-serif;
+  padding: 0 10px;
+}
+
+.button:first-child {
+  border: 1px solid #777;
+  border-top-left-radius: 5px;
+  border-bottom-left-radius: 5px;
+}
+
+.button:last-child {
+  border-top-right-radius: 5px;
+  border-bottom-right-radius: 5px;
+}
+
+.button.pressed {
+  background: #FFF;
+}
+
+.CodeMirror-sizer {
+  padding-top: 40px;
+  padding-bottom: 400px;
+}
+
+.CodeMirror {
+  border-left: 1px solid #999;
+  padding: 0 4px;
+  font: 12px 'Bitstream Vera Sans Mono', 'DejaVu Sans Mono', Monaco, Consolas, monospace !important;
+}
+
+.title {
+  position: absolute;
+  top: 0;
+  font: bold 16px/40px 'Helvetica Neue', Helvetica, sans-serif;
+  padding: 0 4px;
+}
+
+#topbar, .title {
+  cursor: default;
+  -webkit-user-select: none;
+  -moz-user-select: -moz-none;
+}
+
+    </style>
+    <link rel="stylesheet" href="codemirror.css">
+  </head>
+  <body>
+    <div id="topbar"></div>
+    <script src="../node_modules/source-map-support/source-map-support.browser.js"></script>
+    <script src="../node_modules/cppcodegen/cppcodegen.js"></script>
+    <script src="../node_modules/esprima/esprima.js"></script>
+    <script src="escodegen.browser.js"></script>
+    <script src="codemirror.js"></script>
+    <script src="../compiled.js"></script>
+    <script>
+
+var example = [
+  'class Entity {',
+  '  double x = 0;',
+  '  double y = 0;',
+  '  double vx = 0;',
+  '  double vy = 0;',
+  '',
+  '  // Shared means a reference-counted pointer',
+  '  shared World world;',
+  '',
+  '  void update(double seconds);',
+  '}',
+  '',
+  'class Player : Entity {',
+  '  bool left = false;',
+  '  bool right = false;',
+  '  bool jump = false;',
+  '',
+  '  over void update(double seconds) {',
+  '    bool isOnGround = world.isOnGround(this);',
+  '',
+  '    // Update velocity',
+  '    vx = left && !right ? -15 : !left && right ? 15 : 0;',
+  '    if (jump && isOnGround) vy = 50;',
+  '    else vy = vy + world.gravity * seconds;',
+  '',
+  '    // Update position',
+  '    x = x + vx * seconds;',
+  '    y = y + vy * seconds;',
+  '    if (isOnGround && vy < 0) y = 0;',
+  '  }',
+  '}',
+  '',
+  'class World {',
+  '  double gravity = -10;',
+  '',
+  '  // Owned pointers delete the object if they still own',
+  '  // it after the pointer leaves its enclosing scope',
+  '  owned Player player = null;',
+  '',
+  '  bool isOnGround(Entity entity) {',
+  '    return entity.y <= 0;',
+  '  }',
+  '}',
+  '',
+  'int main() {',
+  '  // Create a game world',
+  '  shared World world = new World();',
+  '  world.player = new Player(world);',
+  '',
+  '  // Swap in a new player (the old player will be deleted)',
+  '  owned Player player = new Player(world);',
+  '  player.y = 10;',
+  '  world.player = player;',
+  '',
+  '  // All allocated objects will automatically be deleted',
+  '  return 0;',
+  '}',
+].join('\n') + '\n';
+
+CodeMirror.defineMode('custom', function(config, parserConfig) {
+  return {
+    startState: function(basecolumn) {
+      return { indentation: 0, lastChar: '' };
+    },
+
+    token: function(stream, state) {
+      stream.skipToEnd();
+      state.indentation = stream.indentation();
+      state.lastChar = stream.current().slice(-1);
+    },
+
+    indent: function(state, textAfter) {
+      var lastChar = textAfter.slice(-1);
+      var shouldIndent = state.lastChar === '{';
+      var shouldDedent = lastChar === '}';
+      if (shouldIndent && shouldDedent) return state.indentation;
+      if (shouldDedent) return state.indentation - 2;
+      if (shouldIndent) return state.indentation + 2;
+      return CodeMirror.Pass;
+    },
+
+    electricChars: '{}'
+  };
+});
+
+function Panel(options) {
+  var that = this;
+
+  this.name = options.name;
+  this.isVisible = options.isVisible;
+
+  // Custom mode to enable indenting/dedenting with { and }
+  this.editor = CodeMirror(document.body, {
+    mode: 'custom',
+    tabSize: 2,
+    lineWrapping: true,
+    readOnly: options.readOnly,
+    autofocus: !options.readOnly
+  });
+
+  // Wrap lines with an indent
+  this.editor.on('renderLine', function(cm, line, element) {
+    var off = (CodeMirror.countColumn(line.text, null, cm.getOption('tabSize')) + 2) * cm.defaultCharWidth();
+    element.style.textIndent = '-' + off + 'px';
+    element.style.paddingLeft = 4 + off + 'px';
+  });
+
+  var title = document.createElement('div');
+  title.className = 'title';
+  title.textContent = options.name;
+  this.editor.getScrollerElement().appendChild(title);
+
+  this.button = document.createElement('div');
+  this.button.textContent = options.name;
+  this.button.onmousedown = function() {
+    that.isVisible = !that.isVisible;
+    distribute();
+    recompile();
+  };
+  topbar.appendChild(this.button);
+}
+
+Panel.prototype.layout = function() {
+  this.button.className = this.isVisible ? 'button pressed' : 'button';
+  this.editor.getWrapperElement().style.display = this.isVisible ? 'block' : 'none';
+};
+
+Panel.prototype.setTextIfVisible = function(callback) {
+  if (this.isVisible) {
+    var text = callback(); // Be lazy for speed
+    this.editor.setValue(text);
+  }
+};
+
+function distribute() {
+  var visible = panels.filter(function(p) { return p.isVisible; });
+  visible.forEach(function(p, i) {
+    var left = Math.round(i / visible.length * innerWidth);
+    var top = 40;
+    var right = Math.round((i + 1) / visible.length * innerWidth);
+    var bottom = innerHeight;
+    var editor = p.editor.getWrapperElement().style;
+    editor.position = 'absolute';
+    editor.left = left - 1 + 'px'; // 1px border on .CodeMirror
+    editor.top = top + 'px';
+    editor.width = right - left - 9 + 'px'; // 4px padding on .CodeMirror and 1px border on next .CodeMirror
+    editor.height = bottom - top + 'px';
+  });
+  panels.forEach(function(p) { p.layout(); });
+}
+
+function panelNamed(name) {
+  return panels.filter(function(p) { return p.name === name })[0];
+}
+
+function printToken(token) {
+  return token.kind + ' ' + JSON.stringify(token.text);
+}
+
+function filter(key, value) {
+  if (key !== 'range' &&
+      key !== 'symbol' &&
+      key !== 'scope' &&
+      key !== 'uniqueID' &&
+      key !== 'computedType') {
+    if (value instanceof AST) {
+      var obj = { kind: value.constructor.name };
+      for (var k in value) {
+        if (value.hasOwnProperty(k)) {
+          obj[k] = value[k];
+        }
+      }
+      return obj;
+    }
+    return value;
+  }
+}
+
+function recompile() {
+  try {
+    var compiler = new Compiler(panelNamed('BitScript').editor.getValue());
+    if (compiler.log.hasErrors) {
+      throw compiler.log.diagnostics.join('\n');
+    }
+    panelNamed('JavaScript').setTextIfVisible(function() { return OutputJS.generate(compiler.module) + '\n'; });
+    panelNamed('C++11').setTextIfVisible(function() { return OutputCPP.generate(compiler.module) + '\n'; });
+    panelNamed('AST').setTextIfVisible(function() { return JSON.stringify(compiler.module, filter, 2); });
+    panelNamed('Tokens').setTextIfVisible(function() { return compiler.tokens.map(printToken).join('\n'); });
+  } catch (e) {
+    panels
+      .filter(function(p) { return p.name !== 'BitScript'; })
+      .map(function(p, i) { p.editor.setValue(i === 0 ? (e.stack || e) + '' : ''); });
+  }
+}
+
+function changed() {
+  var newValue = panelNamed('BitScript').editor.getValue();
+  if (newValue !== oldValue) {
+    oldValue = newValue;
+    recompile();
+  }
+}
+
+var oldValue = null;
+var compiler = null;
+var panels = [
+  new Panel({ name: 'BitScript', isVisible: true, readOnly: false }),
+  new Panel({ name: 'JavaScript', isVisible: true, readOnly: true }),
+  new Panel({ name: 'C++11', isVisible: true, readOnly: true }),
+  new Panel({ name: 'AST', isVisible: false, readOnly: true }),
+  new Panel({ name: 'Tokens', isVisible: false, readOnly: true })
+];
+
+panelNamed('BitScript').editor.on('change', changed);
+panelNamed('BitScript').editor.setValue(example);
+window.onresize = distribute;
+distribute();
+changed();
+
+    </script>
+  </body>
+</html>
