@@ -279,6 +279,24 @@ class OutputJS implements StatementVisitor<Object>, DeclarationVisitor<Object>, 
     '>>': true,
   };
 
+  wrapIntegerOperator(result: any): any {
+    // Don't need to emit anything for unary operators on literals
+    // (otherwise all negative values will have "| 0" next to them)
+    if (result.type === 'UnaryExpression' && result.argument.type === 'Literal') {
+      return result;
+    }
+
+    return {
+      type: 'BinaryExpression',
+      operator: '|',
+      left: result,
+      right: {
+        type: 'Literal',
+        value: 0
+      }
+    };
+  }
+
   visitUnaryExpression(node: UnaryExpression): Object {
     var result: Object = {
       type: 'UnaryExpression',
@@ -289,15 +307,7 @@ class OutputJS implements StatementVisitor<Object>, DeclarationVisitor<Object>, 
 
     // Cast the result to an integer if needed (- -2147483648 is still -2147483648)
     if (!OutputJS.INTEGER_OPS[node.op] && node.computedType.innerType === SpecialType.INT) {
-      result = {
-        type: 'BinaryExpression',
-        operator: '|',
-        left: result,
-        right: {
-          type: 'Literal',
-          value: 0
-        }
-      };
+      result = this.wrapIntegerOperator(result);
     }
 
     return result;
@@ -333,15 +343,7 @@ class OutputJS implements StatementVisitor<Object>, DeclarationVisitor<Object>, 
 
     // Cast the result to an integer if needed (1073741824 + 1073741824 is -2147483648)
     if (!OutputJS.INTEGER_OPS[node.op] && node.computedType.innerType === SpecialType.INT) {
-      result = {
-        type: 'BinaryExpression',
-        operator: '|',
-        left: result,
-        right: {
-          type: 'Literal',
-          value: 0
-        }
-      };
+      result = this.wrapIntegerOperator(result);
     }
 
     return result;
