@@ -150,7 +150,7 @@ nextToken:
         var match: Token = tokenStack.pop();
         var index: number = indexStack.pop();
 
-        // Convert < and > into START_PARAMETER_LIST and END_PARAMETER_LIST
+        // Convert < and > into bounds for type parameter lists
         if (match.kind === '<' && token.kind === '>') {
           match.kind = 'START_PARAMETER_LIST';
           token.kind = 'END_PARAMETER_LIST';

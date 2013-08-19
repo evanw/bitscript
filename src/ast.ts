@@ -241,6 +241,7 @@ interface ExpressionVisitor<T> {
   visitCallExpression(node: CallExpression): T;
   visitNewExpression(node: NewExpression): T;
   visitTypeModifierExpression(node: TypeModifierExpression): T;
+  visitTypeParameterExpression(node: TypeParameterExpression): T;
 }
 
 class Expression extends AST {
@@ -421,5 +422,18 @@ class TypeModifierExpression extends Expression {
 
   acceptExpressionVisitor<T>(visitor: ExpressionVisitor<T>): T {
     return visitor.visitTypeModifierExpression(this);
+  }
+}
+
+class TypeParameterExpression extends Expression {
+  constructor(
+    range: SourceRange,
+    public type: Expression,
+    public parameters: Expression[]) {
+    super(range);
+  }
+
+  acceptExpressionVisitor<T>(visitor: ExpressionVisitor<T>): T {
+    return visitor.visitTypeParameterExpression(this);
   }
 }

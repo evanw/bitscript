@@ -632,4 +632,9 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
     assert(false);
     return null;
   }
+
+  visitTypeParameterExpression(node: TypeParameterExpression): Object {
+    assert(false);
+    return null;
+  }
 }

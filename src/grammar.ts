@@ -195,7 +195,7 @@ function parseStatement(context: ParserContext): Statement {
 
 function parseExpressions(context: ParserContext): Expression[] {
   var values: Expression[] = [];
-  while (!context.peek(')')) {
+  while (!context.peek(')') && !context.peek('END_PARAMETER_LIST')) {
     if (values.length > 0 && !context.expect(',')) return null;
     var value: Expression = pratt.parse(context, Power.COMMA);
     if (value === null) return null;
@@ -290,6 +290,14 @@ pratt.parselet('new', Power.LOWEST).prefix = context => {
   var args: Expression[] = parseExpressions(context); if (args === null) return null;
   if (!context.expect(')')) return null;
   return new NewExpression(context.spanSince(token.range), type, args);
+};
+
+// Type parameter expression
+pratt.parselet('START_PARAMETER_LIST', Power.MEMBER).infix = (context, left) => {
+  var token: Token = context.next();
+  var parameters: Expression[] = parseExpressions(context); if (parameters === null) return null;
+  if (!context.expect('END_PARAMETER_LIST')) return null;
+  return new TypeParameterExpression(context.spanSince(left.range), left, parameters);
 };
 
 function parse(log: Log, tokens: Token[]): Module {

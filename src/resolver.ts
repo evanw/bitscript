@@ -788,4 +788,11 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
 
     node.computedType = node.type.computedType.wrapWith(node.modifiers);
   }
+
+  visitTypeParameterExpression(node: TypeParameterExpression) {
+    this.resolveAsType(node.type);
+    node.parameters.forEach(n => this.resolveAsType(n));
+
+    node.computedType = node.type.computedType;
+  }
 }
