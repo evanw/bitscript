@@ -1,6 +1,5 @@
 declare var cppcodegen: any;
 
-// TODO: This is messy, clean this up
 class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>, ExpressionVisitor<Object> {
   needMemoryHeader: boolean = false;
   needMathHeader: boolean = false;
@@ -9,32 +8,6 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
 
   static generate(node: Module): string {
     return cppcodegen.generate(new OutputCPP().visitModule(node), { indent: '  ', nullptr: true }).trim();
-  }
-
-  defaultForType(type: WrappedType): Object {
-    switch (type.innerType) {
-    case SpecialType.INT:
-      return {
-        kind: 'IntegerLiteral',
-        value: 0
-      };
-
-    case SpecialType.DOUBLE:
-      return {
-        kind: 'DoubleLiteral',
-        value: 0
-      };
-
-    case SpecialType.BOOL:
-      return {
-        kind: 'BooleanLiteral',
-        value: false
-      };
-    }
-
-    return {
-      kind: 'NullLiteral'
-    };
   }
 
   visitType(type: WrappedType): Object {
@@ -112,40 +85,6 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
     return type.baseType === null && type.hasDerivedTypes;
   }
 
-  declareObjectType(node: ObjectDeclaration): Object {
-    var variables: VariableDeclaration[] = <VariableDeclaration[]>
-      node.block.statements.filter(n => n instanceof VariableDeclaration);
-    return {
-      kind: 'ObjectDeclaration',
-      type: {
-        kind: 'ObjectType',
-        keyword: 'struct',
-        id: this.visitIdentifier(node.id),
-        bases: node.base === null ? [] : [node.base.acceptExpressionVisitor(this)],
-        body: {
-          kind: 'BlockStatement',
-          body: this.createVariables(variables).map(n => <Object>{
-            kind: 'VariableDeclaration',
-            qualifiers: [],
-            variables: [n]
-          }).concat(this.generateFunctionsForObjectType(node, (n, o) => {
-            o.id = o.id.member;
-            o.body = o.initializations = null;
-            if (n.symbol.isOverridden || n.symbol.isOver()) {
-              o.qualifiers = [{ kind: 'Identifier', name: 'virtual' }];
-              if (n.block === null) {
-                o.body = { kind: 'IntegerLiteral', value: 0 };
-              }
-            }
-            return o;
-          }), !this.needsVirtualDestructor(node) ? [] : [
-            this.generateEmptyVirtualDestructor(node)
-          ])
-        }
-      }
-    };
-  }
-
   getBaseVariables(node: Expression): VariableDeclaration[] {
     if (node instanceof SymbolExpression) {
       var base: ObjectDeclaration = <ObjectDeclaration>(<SymbolExpression>node).symbol.node;
@@ -154,9 +93,12 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
     return [];
   }
 
-  generateConstructor(node: ObjectDeclaration): Object {
-    var variables: VariableDeclaration[] = <VariableDeclaration[]>
-      node.block.statements.filter(n => n instanceof VariableDeclaration);
+  createFunctionsForObjectType(node: ObjectDeclaration,
+      ctor: (result: any) => void,
+      dtor: (result: any) => void,
+      memberFunction: (node: FunctionDeclaration, result: any) => void) {
+    var variables: VariableDeclaration[] = <VariableDeclaration[]>node.block.statements.filter(n => n instanceof VariableDeclaration);
+    var functions: FunctionDeclaration[] = <FunctionDeclaration[]>node.block.statements.filter(n => n instanceof FunctionDeclaration);
     var baseVariables: VariableDeclaration[] = this.getBaseVariables(node.base);
 
     // Initialize member variables using an initialization list
@@ -175,10 +117,9 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
       });
     }
 
-    // Create the constructor function
-    return {
+    // Create the constructor
+    ctor({
       kind: 'FunctionDeclaration',
-      qualifiers: [],
       type: {
         kind: 'FunctionType',
         'arguments': this.createVariables(baseVariables.concat(variables.filter(n => n.value === null)))
@@ -189,47 +130,105 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
         member: this.visitIdentifier(node.id)
       },
       initializations: initializations,
-      body: {
-        kind: 'BlockStatement',
-        body: []
-      }
-    };
-  }
+      body: { kind: 'BlockStatement', body: [] }
+    });
 
-  generateEmptyVirtualDestructor(node: ObjectDeclaration): Object {
-    return {
+    // Create the destructor
+    dtor({
       kind: 'FunctionDeclaration',
-      type: {
-        kind: 'FunctionType',
-        'arguments': []
+      type: { kind: 'FunctionType', 'arguments': [] },
+      id: {
+        kind: 'MemberType',
+        inner: this.visitIdentifier(node.id),
+        member: { kind: 'Identifier', name: '~' + node.id.name }
       },
-      id: { kind: 'Identifier', name: '~' + node.id.name },
-      qualifiers: [
-        { kind: 'Identifier', name: 'virtual' }
-      ],
-      body: {
-        kind: 'BlockStatement',
-        body: []
-      }
-    };
-  }
+      body: { kind: 'BlockStatement', body: [] }
+    });
 
-  generateMemberFunctions(node: ObjectDeclaration, callback: (n: FunctionDeclaration, o: any) => Object): Object[] {
-    var functions: FunctionDeclaration[] = <FunctionDeclaration[]>
-      node.block.statements.filter(n => n instanceof FunctionDeclaration);
-    return functions.map(n => {
+    // Create the member functions
+    functions.forEach(n => {
       var result: any = this.visitFunctionDeclaration(n);
       result.id = {
         kind: 'MemberType',
         inner: this.visitIdentifier(node.id),
         member: result.id
       };
-      return callback(n, result);
-    }).filter(n => n !== null);
+      memberFunction(n, result);
+    });
+  }
+
+  declareObjectType(node: ObjectDeclaration): Object {
+    var variables: VariableDeclaration[] = <VariableDeclaration[]>node.block.statements.filter(n => n instanceof VariableDeclaration);
+
+    // Create member variables
+    var statements: any[] = this.createVariables(variables).map(n => <Object>{
+      kind: 'VariableDeclaration',
+      qualifiers: [],
+      variables: [n]
+    });
+
+    // Forward-declare the constructor, the destructor, and any member functions
+    this.createFunctionsForObjectType(node,
+      ctor => {
+        ctor.id = ctor.id.member;
+        ctor.body = ctor.initializations = null;
+        statements.push(ctor);
+      },
+      dtor => {
+        if (this.needsVirtualDestructor(node)) {
+          dtor.id = dtor.id.member;
+          dtor.qualifiers = [{ kind: 'Identifier', name: 'virtual' }];
+          statements.push(dtor);
+        }
+      },
+      (n, memberFunction) => {
+        memberFunction.id = memberFunction.id.member;
+        memberFunction.body = null;
+        if (n.symbol.isOverridden || n.symbol.isOver()) {
+          memberFunction.qualifiers = [{ kind: 'Identifier', name: 'virtual' }];
+          if (n.block === null) {
+            memberFunction.body = { kind: 'IntegerLiteral', value: 0 };
+          }
+        }
+        statements.push(memberFunction);
+      }
+    );
+
+    // Bundle everything in a struct declaration
+    return {
+      kind: 'ObjectDeclaration',
+      type: {
+        kind: 'ObjectType',
+        keyword: 'struct',
+        id: this.visitIdentifier(node.id),
+        bases: node.base === null ? [] : [node.base.acceptExpressionVisitor(this)],
+        body: {
+          kind: 'BlockStatement',
+          body: statements
+        }
+      }
+    };
   }
 
   generateFunctionsForObjectType(node: ObjectDeclaration, callback: (n: FunctionDeclaration, o: any) => Object): any[] {
-    return [this.generateConstructor(node)].concat(this.generateMemberFunctions(node, callback));
+    var statements: any[] = [];
+
+    // Implement the constructor, and any member functions
+    this.createFunctionsForObjectType(node,
+      ctor => {
+        statements.push(ctor);
+      },
+      dtor => {
+        // The destructor is inline (and so is already implemented)
+      },
+      (n, memberFunction) => {
+        if (n.block !== null) {
+          statements.push(memberFunction);
+        }
+      }
+    );
+
+    return statements;
   }
 
   insertImplicitConversion(from: Expression, to: WrappedType): Object {
