@@ -1,5 +1,8 @@
 default: build
 
+TSC=node_modules/typescript/bin/tsc
+MOCHA=node_modules/mocha/bin/mocha
+
 SOURCES= \
 	src/common.ts \
 	src/diagnostics.ts \
@@ -23,11 +26,11 @@ TESTS= \
 	tests/modifiers.ts
 
 build:
-	time tsc $(SOURCES) --sourcemap --out compiled.js
+	$(TSC) $(SOURCES) --sourcemap --out compiled.js
 
 watch:
-	tsc $(SOURCES) --sourcemap --out compiled.js -w
+	$(TSC) $(SOURCES) --sourcemap --out compiled.js -w
 
 test:
-	time tsc $(SOURCES) $(TESTS) --sourcemap --out test.js
-	mocha
+	$(TSC) $(SOURCES) $(TESTS) --sourcemap --out test.js
+	$(MOCHA)

@@ -4,6 +4,8 @@
   "devDependencies": {
     "source-map-support": "*",
     "cppcodegen": "0.1.0",
-    "esprima": "1.0.3"
+    "typescript": "0.9.1",
+    "esprima": "1.0.3",
+    "mocha": "1.12.0"
   }
 }
