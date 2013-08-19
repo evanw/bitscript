@@ -138,3 +138,25 @@ function semanticErrorOverrideDifferentTypes(log: Log, range: SourceRange, name:
 function semanticErrorAbstractNew(log: Log, node: Expression) {
   log.error(node.range, 'cannot use new on abstract ' + node.computedType);
 }
+
+function semanticErrorCannotParameterize(log: Log, range: SourceRange, type: WrappedType) {
+  log.error(range, 'cannot parameterize ' + type);
+}
+
+function semanticErrorParameterCount(log: Log, range: SourceRange, expected: number, found: number) {
+  log.error(range,
+    'expected ' + expected + ' type parameter' + (expected === 1 ? '' : 's') +
+    ' but found ' + found + ' type parameter' + (found === 1 ? '' : 's'));
+}
+
+function semanticErrorUnparameterizedExpression(log: Log, range: SourceRange, type: WrappedType) {
+  log.error(range, 'cannot use unparameterized ' + type);
+}
+
+function semanticErrorParameterizedExpression(log: Log, range: SourceRange, type: WrappedType) {
+  log.error(range, 'cannot use parameterized ' + type);
+}
+
+function semanticErrorBadParameter(log: Log, range: SourceRange, type: WrappedType) {
+  log.error(range, 'cannot use ' + type + ' as a type parameter');
+}

@@ -103,7 +103,8 @@ nextToken:
       var top: Token = tokenStack[tokenStack.length - 1];
 
       // Stop parsing a type if we find a token that no type expression uses
-      if (top.kind === '<' && token.kind !== '<' && token.kind[0] !== '>' && token.kind !== 'IDENTIFIER' && token.kind !== ',') {
+      if (top.kind === '<' && token.kind !== '<' && token.kind[0] !== '>' && token.kind !== 'IDENTIFIER' &&
+          token.kind !== ',' && token.kind !== 'owned' && token.kind !== 'shared') {
         tokenStack.pop();
         indexStack.pop();
       } else {

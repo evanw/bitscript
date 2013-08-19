@@ -49,6 +49,8 @@ class TypeLogic {
   }
 
   static checkImplicitConversionTypeModifiers(from: WrappedType, to: WrappedType): boolean {
+    if ((from.listItemType !== null) !== (to.listItemType !== null)) return false;
+    if (from.listItemType !== null && to.listItemType !== null && !TypeLogic.equalWrapped(from.listItemType, to.listItemType)) return false;
     if (from.isRawPointer() && to.isRawPointer()) return true;
     if (from.isOwned() && to.isPointer()) return true;
     if (from.isShared() && to.isPointer() && !to.isOwned()) return true;
@@ -80,5 +82,13 @@ class TypeLogic {
       }
     }
     return null;
+  }
+
+  static hasTypeParameters(type: WrappedType): boolean {
+    return type.innerType === NativeTypes.LIST;
+  }
+
+  static isParameterized(type: WrappedType): boolean {
+    return type.listItemType !== null;
   }
 }

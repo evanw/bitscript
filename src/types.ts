@@ -29,6 +29,7 @@ class SpecialType extends Type {
   static ERROR: SpecialType = new SpecialType('<error>');
   static DOUBLE: SpecialType = new SpecialType('double');
   static CIRCULAR: SpecialType = new SpecialType('<circular>');
+  static LIST_ITEM: SpecialType = new SpecialType('<list-item>');
 
   asString(): string {
     return this.name;
@@ -51,8 +52,15 @@ class ObjectType extends Type {
   constructorTypeInitializer: () => FunctionType = null;
   cachedConstructorType: FunctionType = null;
   baseType: ObjectType = null;
+
+  // Does some other object type have this as a base?
   hasDerivedTypes: boolean = false;
+
+  // Does this object type have a (possibly inherited) function without a body?
   isAbstract: boolean = false;
+
+  // Is this object type allowed to be the base class of another object type?
+  isSealed: boolean = false;
 
   constructor(
     public name: string,
@@ -80,6 +88,10 @@ class ObjectType extends Type {
 }
 
 class WrappedType {
+  // The type of a list if innerType is NativeType.LIST (this is a
+  // bit of a hack until the language has generic types for real)
+  listItemType: WrappedType = null;
+
   constructor(
     public innerType: Type,
     public modifiers: number) {
@@ -158,15 +170,18 @@ class WrappedType {
     return (
       (this.modifiers & TypeModifier.OWNED ? 'owned ' : '') +
       (this.modifiers & TypeModifier.SHARED ? 'shared ' : '') +
-      this.innerType.asString()
+      this.innerType.asString() +
+      (this.listItemType !== null ? '<' + this.listItemType.asString() + '>' : '')
     );
   }
 
   toString(): string {
-    return (this.modifiers & TypeModifier.INSTANCE ? 'value of type ' : 'type ') + this.asString();
+    return (this.modifiers & TypeModifier.INSTANCE ? (this.isPointer() ? 'pointer' : 'value') + ' of type ' : 'type ') + this.asString();
   }
 
   wrapWith(flag: number): WrappedType {
-    return new WrappedType(this.innerType, this.modifiers | flag);
+    var type: WrappedType = new WrappedType(this.innerType, this.modifiers | flag);
+    type.listItemType = this.listItemType;
+    return type;
   }
 }

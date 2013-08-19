@@ -436,7 +436,6 @@ class OutputJS implements StatementVisitor<Object>, DeclarationVisitor<Object>, 
   }
 
   visitTypeParameterExpression(node: TypeParameterExpression): Object {
-    assert(false);
-    return null;
+    return node.type.acceptExpressionVisitor(this);
   }
 }

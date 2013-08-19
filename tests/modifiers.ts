@@ -25,7 +25,7 @@ test([
   'Foo foo;',
   'owned Foo bar = foo;',
 ], [
-  'error on line 3 of <stdin>: cannot convert from value of type Foo to value of type owned Foo',
+  'error on line 3 of <stdin>: cannot convert from pointer of type Foo to pointer of type owned Foo',
   '',
   'owned Foo bar = foo;',
   '                ~~~',
@@ -36,7 +36,7 @@ test([
   'Foo foo;',
   'shared Foo bar = foo;',
 ], [
-  'error on line 3 of <stdin>: cannot convert from value of type Foo to value of type shared Foo',
+  'error on line 3 of <stdin>: cannot convert from pointer of type Foo to pointer of type shared Foo',
   '',
   'shared Foo bar = foo;',
   '                 ~~~',
@@ -47,7 +47,7 @@ test([
   'shared Foo foo;',
   'owned Foo bar = foo;',
 ], [
-  'error on line 3 of <stdin>: cannot convert from value of type shared Foo to value of type owned Foo',
+  'error on line 3 of <stdin>: cannot convert from pointer of type shared Foo to pointer of type owned Foo',
   '',
   'owned Foo bar = foo;',
   '                ~~~',

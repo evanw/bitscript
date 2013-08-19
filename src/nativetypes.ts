@@ -1,5 +1,6 @@
 class NativeTypes {
   static MATH: ObjectType = new ObjectType('Math', new Scope(null));
+  static LIST: ObjectType = new ObjectType('List', new Scope(null));
 
   static createFunction(result: Type, args: Type[]): WrappedType {
     return new FunctionType(result.wrap(TypeModifier.INSTANCE), args.map(t => t.wrap(TypeModifier.INSTANCE))).wrap(TypeModifier.INSTANCE);
@@ -28,3 +29,17 @@ NativeTypes.MATH.scope.define('pow', NativeTypes.createFunction(SpecialType.DOUB
 NativeTypes.MATH.scope.define('min', NativeTypes.createFunction(SpecialType.DOUBLE, [SpecialType.DOUBLE, SpecialType.DOUBLE]));
 NativeTypes.MATH.scope.define('max', NativeTypes.createFunction(SpecialType.DOUBLE, [SpecialType.DOUBLE, SpecialType.DOUBLE]));
 NativeTypes.MATH.scope.define('random', NativeTypes.createFunction(SpecialType.DOUBLE, []));
+
+// Lists are special-cased for now
+NativeTypes.LIST.isSealed = true;
+NativeTypes.LIST.cachedConstructorType = new FunctionType(null, []);
+NativeTypes.LIST.scope.define('length', SpecialType.INT.wrap(TypeModifier.INSTANCE));
+NativeTypes.LIST.scope.define('get', NativeTypes.createFunction(SpecialType.LIST_ITEM, [SpecialType.INT]));
+NativeTypes.LIST.scope.define('set', NativeTypes.createFunction(SpecialType.VOID, [SpecialType.INT, SpecialType.LIST_ITEM]));
+NativeTypes.LIST.scope.define('push', NativeTypes.createFunction(SpecialType.VOID, [SpecialType.LIST_ITEM]));
+NativeTypes.LIST.scope.define('pop', NativeTypes.createFunction(SpecialType.LIST_ITEM, []));
+NativeTypes.LIST.scope.define('unshift', NativeTypes.createFunction(SpecialType.VOID, [SpecialType.LIST_ITEM]));
+NativeTypes.LIST.scope.define('shift', NativeTypes.createFunction(SpecialType.LIST_ITEM, []));
+NativeTypes.LIST.scope.define('indexOf', NativeTypes.createFunction(SpecialType.INT, [SpecialType.LIST_ITEM]));
+NativeTypes.LIST.scope.define('insert', NativeTypes.createFunction(SpecialType.VOID, [SpecialType.INT, SpecialType.LIST_ITEM]));
+NativeTypes.LIST.scope.define('remove', NativeTypes.createFunction(SpecialType.VOID, [SpecialType.INT]));

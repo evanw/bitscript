@@ -195,13 +195,22 @@ function parseStatement(context: ParserContext): Statement {
 
 function parseExpressions(context: ParserContext): Expression[] {
   var values: Expression[] = [];
-  while (!context.peek(')') && !context.peek('END_PARAMETER_LIST')) {
+  while (!context.peek(')')) {
     if (values.length > 0 && !context.expect(',')) return null;
-    var value: Expression = pratt.parse(context, Power.COMMA);
-    if (value === null) return null;
+    var value: Expression = pratt.parse(context, Power.COMMA); if (value === null) return null;
     values.push(value);
   }
   return values;
+}
+
+function parseTypes(context: ParserContext): Expression[] {
+  var types: Expression[] = [];
+  while (!context.peek('END_PARAMETER_LIST')) {
+    if (types.length > 0 && !context.expect(',')) return null;
+    var type: Expression = parseType(context); if (type === null) return null;
+    types.push(type);
+  }
+  return types;
 }
 
 function buildUnaryPrefix(context: ParserContext, token: Token, node: Expression): Expression {
@@ -295,7 +304,7 @@ pratt.parselet('new', Power.LOWEST).prefix = context => {
 // Type parameter expression
 pratt.parselet('START_PARAMETER_LIST', Power.MEMBER).infix = (context, left) => {
   var token: Token = context.next();
-  var parameters: Expression[] = parseExpressions(context); if (parameters === null) return null;
+  var parameters: Expression[] = parseTypes(context); if (parameters === null) return null;
   if (!context.expect('END_PARAMETER_LIST')) return null;
   return new TypeParameterExpression(context.spanSince(left.range), left, parameters);
 };

@@ -66,7 +66,7 @@ class Initializer implements DeclarationVisitor<WrappedType> {
 
     // Find the base class if there is one
     if (node.base !== null) {
-      this.resolver.resolveAsType(node.base);
+      this.resolver.resolveAsParameterizedType(node.base);
 
       // Avoid reporting further errors
       var baseType: WrappedType = node.base.computedType;
@@ -75,8 +75,8 @@ class Initializer implements DeclarationVisitor<WrappedType> {
       }
 
       // Can only inherit from objects
-      if (!baseType.isObject()) {
-        semanticErrorBadBaseType(this.resolver.log, node.range, baseType);
+      if (!baseType.isObject() || baseType.asObject().isSealed) {
+        semanticErrorBadBaseType(this.resolver.log, node.base.range, baseType);
         return SpecialType.ERROR.wrap(0);
       }
 
@@ -120,7 +120,7 @@ class Initializer implements DeclarationVisitor<WrappedType> {
   }
 
   visitFunctionDeclaration(node: FunctionDeclaration): WrappedType {
-    this.resolver.resolveAsType(node.result);
+    this.resolver.resolveAsParameterizedType(node.result);
 
     // Determine whether the function is abstract
     node.symbol.isAbstract = node.block === null;
@@ -148,7 +148,7 @@ class Initializer implements DeclarationVisitor<WrappedType> {
     this.resolver.ignoreModifier(node, SymbolModifier.OVER, 'on a variable declaration');
 
     // Resolve the type
-    this.resolver.resolveAsType(node.type);
+    this.resolver.resolveAsParameterizedType(node.type);
     return node.type.computedType.wrapWith(TypeModifier.INSTANCE | TypeModifier.STORAGE);
   }
 }
@@ -175,6 +175,7 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
     scope.define('bool', SpecialType.BOOL.wrap(0));
     scope.define('double', SpecialType.DOUBLE.wrap(0));
     scope.define('Math', NativeTypes.MATH.wrap(TypeModifier.INSTANCE));
+    scope.define('List', NativeTypes.LIST.wrap(0));
     return scope;
   }
 
@@ -220,6 +221,34 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
     // Must not be an instance
     if (!node.computedType.isError() && node.computedType.isInstance()) {
       semanticErrorUnexpectedExpression(this.log, node.range, node.computedType);
+      node.computedType = SpecialType.ERROR.wrap(0);
+    }
+  }
+
+  resolveAsParameterizedType(node: Expression) {
+    // Only resolve once
+    if (node.computedType !== null) {
+      return;
+    }
+    this.resolveAsType(node);
+
+    // Must be parameterized
+    if (TypeLogic.hasTypeParameters(node.computedType) && !TypeLogic.isParameterized(node.computedType)) {
+      semanticErrorUnparameterizedExpression(this.log, node.range, node.computedType);
+      node.computedType = SpecialType.ERROR.wrap(0);
+    }
+  }
+
+  resolveAsUnparameterizedType(node: Expression) {
+    // Only resolve once
+    if (node.computedType !== null) {
+      return;
+    }
+    this.resolveAsType(node);
+
+    // Must be parameterized
+    if (TypeLogic.hasTypeParameters(node.computedType) && TypeLogic.isParameterized(node.computedType)) {
+      semanticErrorParameterizedExpression(this.log, node.range, node.computedType);
       node.computedType = SpecialType.ERROR.wrap(0);
     }
   }
@@ -742,7 +771,7 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
   }
 
   visitNewExpression(node: NewExpression) {
-    this.resolveAsType(node.type);
+    this.resolveAsParameterizedType(node.type);
     node.args.forEach(n => this.resolveAsExpression(n));
 
     // Avoid reporting further errors
@@ -764,23 +793,25 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
     }
 
     this.checkCallArguments(node.range, objectType.constructorType(), node.args);
-    node.computedType = objectType.wrap(TypeModifier.INSTANCE | TypeModifier.OWNED);
+    node.computedType = node.type.computedType.wrapWith(TypeModifier.INSTANCE | TypeModifier.OWNED);
   }
 
   visitTypeModifierExpression(node: TypeModifierExpression) {
-    this.resolveAsType(node.type);
+    this.resolveAsParameterizedType(node.type);
 
     // Avoid reporting further errors
     if (node.type.computedType.isError()) {
       return;
     }
 
+    // Cannot use both owned and shared
     var all: number = node.modifiers & (TypeModifier.OWNED | TypeModifier.SHARED);
     if (all !== TypeModifier.OWNED && all !== TypeModifier.SHARED) {
       semanticErrorPointerModifierConflict(this.log, node.range);
       return;
     }
 
+    // Can only use owned and shared on object types
     if (all !== 0 && !node.type.computedType.isObject()) {
       semanticErrorInvalidPointerModifier(this.log, node.range, node.type.computedType);
       return;
@@ -790,9 +821,34 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
   }
 
   visitTypeParameterExpression(node: TypeParameterExpression) {
-    this.resolveAsType(node.type);
-    node.parameters.forEach(n => this.resolveAsType(n));
+    this.resolveAsUnparameterizedType(node.type);
+    node.parameters.forEach(n => this.resolveAsParameterizedType(n));
 
-    node.computedType = node.type.computedType;
+    // Avoid reporting further errors
+    if (node.type.computedType.isError() || node.parameters.some(p => p.computedType.isError())) {
+      return;
+    }
+
+    // Can only parameterize list for now
+    if (node.type.computedType.innerType !== NativeTypes.LIST) {
+      semanticErrorCannotParameterize(this.log, node.type.range, node.type.computedType);
+      return;
+    }
+
+    // Special-case for lists
+    if (node.parameters.length !== 1) {
+      semanticErrorParameterCount(this.log, node.range, 1, node.parameters.length);
+      return;
+    }
+
+    // Only allow object types for now so we can return null from get()
+    var parameter: WrappedType = node.parameters[0].computedType;
+    if (!parameter.isObject()) {
+      semanticErrorBadParameter(this.log, node.parameters[0].range, parameter);
+      return;
+    }
+
+    node.computedType = new WrappedType(node.type.computedType.innerType, 0);
+    node.computedType.listItemType = parameter;
   }
 }

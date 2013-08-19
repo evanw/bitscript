@@ -7,10 +7,36 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
   returnType: WrappedType = null;
 
   static generate(node: Module): string {
-    return cppcodegen.generate(new OutputCPP().visitModule(node), { indent: '  ', nullptr: true }).trim();
+    return cppcodegen.generate(new OutputCPP().visitModule(node), { indent: '  ', cpp11: true }).trim();
   }
 
-  visitType(type: WrappedType): Object {
+  defaultForType(type: WrappedType): Object {
+    switch (type.innerType) {
+    case SpecialType.INT:
+      return {
+        kind: 'IntegerLiteral',
+        value: 0
+      };
+
+    case SpecialType.DOUBLE:
+      return {
+        kind: 'DoubleLiteral',
+        value: 0
+      };
+
+    case SpecialType.BOOL:
+      return {
+        kind: 'BooleanLiteral',
+        value: false
+      };
+    }
+
+    return {
+      kind: 'NullLiteral'
+    };
+  }
+
+  visitType(type: WrappedType): any {
     switch (type.innerType) {
     case SpecialType.INT: return { kind: 'Identifier', name: 'int' };
     case SpecialType.VOID: return { kind: 'Identifier', name: 'void' };
@@ -19,10 +45,23 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
     }
 
     assert(type.innerType instanceof ObjectType);
+    var objectType: ObjectType = <ObjectType>type.innerType;
     var result: Object = {
       kind: 'Identifier',
-      name: (<ObjectType>type.innerType).name
+      name: objectType.name
     };
+
+    if (objectType === NativeTypes.LIST) {
+      result = {
+        kind: 'SpecializeTemplate',
+        template: {
+          kind: 'MemberType',
+          inner: { kind: 'Identifier', name: 'std' },
+          member: { kind: 'Identifier', name: 'vector' }
+        },
+        parameters: [this.visitType(type.listItemType)]
+      };
+    }
 
     if (type.isRawPointer()) {
       return {
@@ -466,7 +505,7 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
         kind: 'Variable',
         type: this.visitType(node.type.computedType),
         id: this.visitIdentifier(node.id),
-        init: node.value !== null ? this.insertImplicitConversion(node.value, node.symbol.type) : null
+        init: node.value !== null ? this.insertImplicitConversion(node.value, node.symbol.type) : this.defaultForType(node.symbol.type)
       }]
     };
   }
@@ -618,7 +657,7 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
           inner: { kind: 'Identifier', name: 'std' },
           member: { kind: 'Identifier', name: 'unique_ptr' }
         },
-        parameters: [node.type.acceptExpressionVisitor(this)]
+        parameters: [this.visitType(node.type.computedType).inner]
       },
       arguments: [{
         kind: 'NewExpression',
@@ -634,7 +673,6 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
   }
 
   visitTypeParameterExpression(node: TypeParameterExpression): Object {
-    assert(false);
-    return null;
+    return node.type.acceptExpressionVisitor(this);
   }
 }
