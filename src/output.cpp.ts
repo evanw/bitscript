@@ -99,7 +99,7 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
       memberFunction: (node: FunctionDeclaration, result: any) => void) {
     var variables: VariableDeclaration[] = <VariableDeclaration[]>node.block.statements.filter(n => n instanceof VariableDeclaration);
     var functions: FunctionDeclaration[] = <FunctionDeclaration[]>node.block.statements.filter(n => n instanceof FunctionDeclaration);
-    var baseVariables: VariableDeclaration[] = this.getBaseVariables(node.base);
+    var baseVariables: VariableDeclaration[] = this.getBaseVariables(node.base).filter(n => n.value === null);
 
     // Initialize member variables using an initialization list
     var initializations: Object[] = variables.map(n => ({

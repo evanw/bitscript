@@ -54,6 +54,7 @@ body {
 }
 
 .CodeMirror-sizer {
+  padding-top: 40px;
   padding-bottom: 400px;
 }
 
@@ -64,12 +65,10 @@ body {
 }
 
 .title {
-  border-left: 1px solid #999;
   position: absolute;
-  top: 40px;
-  height: 40px;
-  font: bold 16px 'Helvetica Neue', Helvetica, sans-serif;
-  padding: 8px;
+  top: 0;
+  font: bold 16px/40px 'Helvetica Neue', Helvetica, sans-serif;
+  padding: 0 4px;
 }
 
 #topbar, .title {
@@ -97,12 +96,14 @@ var example = [
   '  double y = 0;',
   '  double vx = 0;',
   '  double vy = 0;',
+  '',
+  '  // Shared means a reference-counted pointer',
   '  shared World world;',
   '',
   '  void update(double seconds);',
   '}',
   '',
-  'class PlayerEntity : Entity {',
+  'class Player : Entity {',
   '  bool left = false;',
   '  bool right = false;',
   '  bool jump = false;',
@@ -124,7 +125,10 @@ var example = [
   '',
   'class World {',
   '  double gravity = -10;',
-  '  owned PlayerEntity player = null;',
+  '',
+  '  // Owned pointers delete the object if they still own',
+  '  // it after the pointer leaves its enclosing scope',
+  '  owned Player player = null;',
   '',
   '  bool isOnGround(Entity entity) {',
   '    return entity.y <= 0;',
@@ -132,8 +136,16 @@ var example = [
   '}',
   '',
   'int main() {',
+  '  // Create a game world',
   '  shared World world = new World();',
-  '  world.player = new PlayerEntity(world);',
+  '  world.player = new Player(world);',
+  '',
+  '  // Swap in a new player (the old player will be deleted)',
+  '  owned Player player = new Player(world);',
+  '  player.y = 10;',
+  '  world.player = player;',
+  '',
+  '  // All allocated objects will automatically be deleted',
   '  return 0;',
   '}',
 ].join('\n') + '\n';
@@ -154,6 +166,7 @@ CodeMirror.defineMode('custom', function(config, parserConfig) {
       var lastChar = textAfter.slice(-1);
       var shouldIndent = state.lastChar === '{';
       var shouldDedent = lastChar === '}';
+      if (shouldIndent && shouldDedent) return state.indentation;
       if (shouldDedent) return state.indentation - 2;
       if (shouldIndent) return state.indentation + 2;
       return CodeMirror.Pass;
@@ -168,6 +181,8 @@ function Panel(options) {
 
   this.name = options.name;
   this.isVisible = options.isVisible;
+
+  // Custom mode to enable indenting/dedenting with { and }
   this.editor = CodeMirror(document.body, {
     mode: 'custom',
     tabSize: 2,
@@ -176,10 +191,17 @@ function Panel(options) {
     autofocus: !options.readOnly
   });
 
-  this.title = document.createElement('div');
-  this.title.className = 'title';
-  this.title.textContent = options.name;
-  document.body.appendChild(this.title);
+  // Wrap lines with an indent
+  this.editor.on('renderLine', function(cm, line, element) {
+    var off = (CodeMirror.countColumn(line.text, null, cm.getOption('tabSize')) + 2) * cm.defaultCharWidth();
+    element.style.textIndent = '-' + off + 'px';
+    element.style.paddingLeft = 4 + off + 'px';
+  });
+
+  var title = document.createElement('div');
+  title.className = 'title';
+  title.textContent = options.name;
+  this.editor.getScrollerElement().appendChild(title);
 
   this.button = document.createElement('div');
   this.button.textContent = options.name;
@@ -193,7 +215,7 @@ function Panel(options) {
 
 Panel.prototype.layout = function() {
   this.button.className = this.isVisible ? 'button pressed' : 'button';
-  this.title.style.display = this.editor.getWrapperElement().style.display = this.isVisible ? 'block' : 'none';
+  this.editor.getWrapperElement().style.display = this.isVisible ? 'block' : 'none';
 };
 
 Panel.prototype.setTextIfVisible = function(callback) {
@@ -207,15 +229,14 @@ function distribute() {
   var visible = panels.filter(function(p) { return p.isVisible; });
   visible.forEach(function(p, i) {
     var left = Math.round(i / visible.length * innerWidth);
-    var top = 80;
+    var top = 40;
     var right = Math.round((i + 1) / visible.length * innerWidth);
     var bottom = innerHeight;
     var editor = p.editor.getWrapperElement().style;
-    var title = p.title.style;
     editor.position = 'absolute';
-    editor.left = title.left = left - 1 + 'px'; // 1px border on .CodeMirror
+    editor.left = left - 1 + 'px'; // 1px border on .CodeMirror
     editor.top = top + 'px';
-    editor.width = title.width = right - left - 9 + 'px'; // 4px padding on .CodeMirror and 1px border on next .CodeMirror
+    editor.width = right - left - 9 + 'px'; // 4px padding on .CodeMirror and 1px border on next .CodeMirror
     editor.height = bottom - top + 'px';
   });
   panels.forEach(function(p) { p.layout(); });
@@ -255,7 +276,7 @@ function recompile() {
       throw compiler.log.diagnostics.join('\n');
     }
     panelNamed('JavaScript').setTextIfVisible(function() { return OutputJS.generate(compiler.module) + '\n'; });
-    panelNamed('C++').setTextIfVisible(function() { return OutputCPP.generate(compiler.module) + '\n'; });
+    panelNamed('C++11').setTextIfVisible(function() { return OutputCPP.generate(compiler.module) + '\n'; });
     panelNamed('AST').setTextIfVisible(function() { return JSON.stringify(compiler.module, filter, 2); });
     panelNamed('Tokens').setTextIfVisible(function() { return compiler.tokens.map(printToken).join('\n'); });
   } catch (e) {
@@ -278,7 +299,7 @@ var compiler = null;
 var panels = [
   new Panel({ name: 'BitScript', isVisible: true, readOnly: false }),
   new Panel({ name: 'JavaScript', isVisible: true, readOnly: true }),
-  new Panel({ name: 'C++', isVisible: true, readOnly: true }),
+  new Panel({ name: 'C++11', isVisible: true, readOnly: true }),
   new Panel({ name: 'AST', isVisible: false, readOnly: true }),
   new Panel({ name: 'Tokens', isVisible: false, readOnly: true })
 ];

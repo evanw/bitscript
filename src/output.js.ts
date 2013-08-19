@@ -128,15 +128,13 @@ class OutputJS implements StatementVisitor<Object>, DeclarationVisitor<Object>, 
   }
 
   generateConstructor(node: ObjectDeclaration): Object[] {
-    var variables: VariableDeclaration[] = <VariableDeclaration[]>
-      node.block.statements.filter(n => n instanceof VariableDeclaration);
-    var baseVariables: VariableDeclaration[] = this.getBaseVariables(node.base);
+    var variables: VariableDeclaration[] = <VariableDeclaration[]>node.block.statements.filter(n => n instanceof VariableDeclaration);
+    var baseVariables: VariableDeclaration[] = this.getBaseVariables(node.base).filter(n => n.value === null);
 
     // Create the constructor function
     var result: any[] = [{
       type: 'FunctionDeclaration',
-      params: baseVariables.concat(variables.filter(n => n.value === null))
-        .map(n => { return this.visitIdentifier(n.id); }),
+      params: baseVariables.concat(variables.filter(n => n.value === null)).map(n => { return this.visitIdentifier(n.id); }),
       id: this.visitIdentifier(node.id),
       body: {
         type: 'BlockStatement',

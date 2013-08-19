@@ -140,7 +140,9 @@ function parseStatement(context: ParserContext): Statement {
 
     // Variable declaration
     var value: Expression = null;
-    if (context.eat('=')) value = pratt.parse(context, Power.LOWEST);
+    if (context.eat('=')) {
+      value = pratt.parse(context, Power.LOWEST); if (value === null) return null;
+    }
     if (!context.expect(';')) return null;
     return new VariableDeclaration(context.spanSince(range), id, modifiers, type, value);
   }
