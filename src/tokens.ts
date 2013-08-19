@@ -89,3 +89,78 @@ function tokenize(log: Log, source: Source): Token[] {
   tokens.push(new Token(new SourceRange(source, marker, marker), 'END', ''));
   return tokens;
 }
+
+function prepareTokens(tokens: Token[]): Token[] {
+  var tokenStack: Token[] = [];
+  var indexStack: number[] = [];
+
+nextToken:
+  for (var i = 0; i < tokens.length; i++) {
+    var token: Token = tokens[i];
+
+    // Remove tokens on the stack if they aren't working out
+    while (tokenStack.length > 0) {
+      var top: Token = tokenStack[tokenStack.length - 1];
+
+      // Stop parsing a type if we find a token that no type expression uses
+      if (top.kind === '<' && token.kind !== '<' && token.kind[0] !== '>' && token.kind !== 'IDENTIFIER' && token.kind !== ',') {
+        tokenStack.pop();
+        indexStack.pop();
+      } else {
+        break;
+      }
+    }
+
+    // Group open
+    if (token.kind === '(' || token.kind === '{' || token.kind === '[' || token.kind === '<') {
+      tokenStack.push(token);
+      indexStack.push(i);
+      continue;
+    }
+
+    // Group close
+    if (token.kind === ')' || token.kind === '}' || token.kind === ']' || token.kind[0] === '>') {
+      // Search for a matching opposite token
+      while (tokenStack.length > 0) {
+        var top: Token = tokenStack[tokenStack.length - 1];
+
+        // Don't match closing angle brackets that don't work since they are just operators
+        if (token.kind[0] === '>' && top.kind !== '<') {
+          break;
+        }
+
+        // Remove tentative matches that didn't work out
+        if (top.kind === '<' && token.kind[0] !== '>') {
+          tokenStack.pop();
+          indexStack.pop();
+          continue;
+        }
+
+        // Break apart operators that start with a closing angle bracket
+        if (token.kind[0] === '>' && token.kind.length > 1) {
+          var start: Marker = token.range.start;
+          var middle: Marker = new Marker(start.index + 1, start.line, start.column + 1);
+          tokens.splice(i + 1, 0, new Token(new SourceRange(token.range.source, middle, token.range.end), token.kind.slice(1), token.text.slice(1)));
+          token.range.end = middle;
+          token.kind = '>';
+          token.text = '>';
+        }
+
+        // Consume the matching token
+        var match: Token = tokenStack.pop();
+        var index: number = indexStack.pop();
+
+        // Convert < and > into START_PARAMETER_LIST and END_PARAMETER_LIST
+        if (match.kind === '<' && token.kind === '>') {
+          match.kind = 'START_PARAMETER_LIST';
+          token.kind = 'END_PARAMETER_LIST';
+        }
+
+        // Stop the search since we found a match
+        continue nextToken;
+      }
+    }
+  }
+
+  return tokens;
+}

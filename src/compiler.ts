@@ -7,7 +7,7 @@ class Compiler {
     var source: Source = new Source('<stdin>', input);
 
     // Tokenize
-    this.tokens = tokenize(this.log, source);
+    this.tokens = prepareTokens(tokenize(this.log, source));
     if (this.log.hasErrors) return;
 
     // Parse

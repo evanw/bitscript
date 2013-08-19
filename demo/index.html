@@ -270,20 +270,35 @@ function filter(key, value) {
   }
 }
 
+function showTextInFirstVisiblePannel(panels, text) {
+  panels.filter(function(p) { return p.name !== 'BitScript' && p.isVisible; })
+    .forEach(function(p, i) { p.editor.setValue(i === 0 ? text : ''); });
+}
+
 function recompile() {
   try {
     var compiler = new Compiler(panelNamed('BitScript').editor.getValue());
-    if (compiler.log.hasErrors) {
-      throw compiler.log.diagnostics.join('\n');
-    }
-    panelNamed('JavaScript').setTextIfVisible(function() { return OutputJS.generate(compiler.module) + '\n'; });
-    panelNamed('C++11').setTextIfVisible(function() { return OutputCPP.generate(compiler.module) + '\n'; });
-    panelNamed('AST').setTextIfVisible(function() { return JSON.stringify(compiler.module, filter, 2); });
     panelNamed('Tokens').setTextIfVisible(function() { return compiler.tokens.map(printToken).join('\n'); });
+
+    // If there were error messages, stick error messages in the first pannel
+    // that would otherwise be blank and blank out the rest of the pannels
+    var blankPannels = [];
+    if (!compiler.log.hasErrors) {
+      panelNamed('JavaScript').setTextIfVisible(function() { return OutputJS.generate(compiler.module) + '\n'; });
+      panelNamed('C++11').setTextIfVisible(function() { return OutputCPP.generate(compiler.module) + '\n'; });
+    } else {
+      blankPannels.push(panelNamed('JavaScript'), panelNamed('C++11'));
+    }
+    if (compiler.module !== null) {
+      panelNamed('AST').setTextIfVisible(function() { return JSON.stringify(compiler.module, filter, 2); });
+    } else {
+      blankPannels.push(panelNamed('AST'));
+    }
+    if (compiler.log.hasErrors) {
+      showTextInFirstVisiblePannel(blankPannels, compiler.log.diagnostics.join('\n'));
+    }
   } catch (e) {
-    panels
-      .filter(function(p) { return p.name !== 'BitScript'; })
-      .map(function(p, i) { p.editor.setValue(i === 0 ? (e.stack || e) + '' : ''); });
+    showTextInFirstVisiblePannel(panels, (e.stack || e) + '');
   }
 }
 
