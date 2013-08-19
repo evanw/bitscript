@@ -247,7 +247,7 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
     if (from.computedType.isOwned() && to.isShared()) {
       if (from instanceof NewExpression) {
         var node: NewExpression = <NewExpression>from;
-        var functionType: FunctionType = node.type.computedType.asObject().constructorType;
+        var functionType: FunctionType = node.type.computedType.asObject().constructorType();
         this.needMemoryHeader = true;
         return {
           kind: 'CallExpression',
@@ -607,7 +607,7 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
   }
 
   visitNewExpression(node: NewExpression): Object {
-    var functionType: FunctionType = node.type.computedType.asObject().constructorType;
+    var functionType: FunctionType = node.type.computedType.asObject().constructorType();
     this.needMemoryHeader = true;
     return {
       kind: 'CallExpression',

@@ -48,7 +48,8 @@ class FunctionType extends Type {
 }
 
 class ObjectType extends Type {
-  constructorType: FunctionType = null;
+  constructorTypeInitializer: () => FunctionType = null;
+  cachedConstructorType: FunctionType = null;
   baseType: ObjectType = null;
   hasDerivedTypes: boolean = false;
   isAbstract: boolean = false;
@@ -57,6 +58,20 @@ class ObjectType extends Type {
     public name: string,
     public scope: Scope) {
     super();
+  }
+
+  // Lazily compute the constructor type when it's needed instead of when the
+  // class is first initialized to get around tricky ordering problems:
+  //
+  //   class A { C c; }
+  //   class B : A {}
+  //   class C { B b; }
+  //
+  constructorType(): FunctionType {
+    if (this.cachedConstructorType === null) {
+      this.cachedConstructorType = this.constructorTypeInitializer();
+    }
+    return this.cachedConstructorType;
   }
 
   asString(): string {

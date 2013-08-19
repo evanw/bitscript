@@ -107,12 +107,15 @@ class Initializer implements DeclarationVisitor<WrappedType> {
     // Determine whether the class is abstract
     type.isAbstract = node.block.scope.containsAbstractSymbols();
 
-    // Create the constructor type
-    var baseArgTypes: WrappedType[] = type.baseType !== null ? type.baseType.constructorType.args : [];
-    var argTypes: WrappedType[] = node.block.statements
-      .filter(n => n instanceof VariableDeclaration && n.value === null)
-      .map(n => (<VariableDeclaration>n).symbol.type);
-    type.constructorType = new FunctionType(null, baseArgTypes.concat(argTypes));
+    // Lazily compute the constructor type, see ObjectType for details
+    type.constructorTypeInitializer = () => {
+      var baseArgTypes: WrappedType[] = type.baseType !== null ? type.baseType.constructorType().args : [];
+      var argTypes: WrappedType[] = node.block.statements
+        .filter(n => n instanceof VariableDeclaration && (<VariableDeclaration>n).value === null)
+        .map(n => (<VariableDeclaration>n).symbol.type);
+      return new FunctionType(null, baseArgTypes.concat(argTypes));
+    };
+
     return type.wrap(0);
   }
 
@@ -760,7 +763,7 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
       return;
     }
 
-    this.checkCallArguments(node.range, objectType.constructorType, node.args);
+    this.checkCallArguments(node.range, objectType.constructorType(), node.args);
     node.computedType = objectType.wrap(TypeModifier.INSTANCE | TypeModifier.OWNED);
   }
 

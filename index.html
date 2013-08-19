@@ -6,169 +6,230 @@
     <style>
 
 body {
-  background: #222;
-  margin: 20px;
-  color: #FFF;
-}
-
-h2 {
-  margin: 50px;
-  color: #555;
-  font: bold 25px 'Helvetica Neue', Helvetica, sans-serif;
-  text-shadow: 0 1px 3px #000;
-}
-
-small {
-  font-size: 50%;
-  font-style: italic;
-  font-weight: normal;
-}
-
-.textarea {
-  position: absolute;
-  top: 100px;
-  left: 50px;
-  right: 66px; /* 50px + 16px for textarea padding */
-  bottom: 66px; /* 50px + 16px for textarea padding */
-}
-
-textarea {
-  width: 100%;
-  height: 100%;
-  background: #111;
-  color: #FFF;
-  font: 12px/16px 'Bitstream Vera Sans Mono', 'DejaVu Sans Mono', Monaco, monospace;
-  border: none;
-  padding: 8px;
-  resize: none;
-  box-shadow: 0 0 4px #333, inset 0 1px 6px #000, inset 0 5px 20px #070707;
-  text-shadow: 0 1px 3px #000;
-}
-
-textarea:focus {
-  outline: none;
-}
-
-#left {
   position: fixed;
-  top: 0;
   left: 0;
-  right: 50%;
-  bottom: 0;
-}
-
-#left .textarea {
-  right: 41px; /* 25px + 16px for textarea padding */
-}
-
-#right {
-  position: fixed;
   top: 0;
   right: 0;
-  width: 50%;
   bottom: 0;
+  overflow: hidden;
+  margin: 0;
 }
 
-#right .textarea {
-  left: 25px;
+#topbar {
+  position: absolute;
+  left: 0;
+  top: 0;
+  right: 0;
+  height: 39px;
+  line-height: 39px;
+  text-align: center;
+  background: #EEE;
+  border-bottom: 1px solid #777;
 }
 
-#right h2 {
-  margin-left: 25px;
+.button {
+  margin: 0;
+  display: inline-block;
+  background: #DDD;
+  background: linear-gradient(#FFF, #C7C7C7);
+  border: 1px solid #777;
+  border-left: none;
+  font: 14px/24px 'Helvetica Neue', Helvetica, sans-serif;
+  padding: 0 10px;
+}
+
+.button:first-child {
+  border: 1px solid #777;
+  border-top-left-radius: 5px;
+  border-bottom-left-radius: 5px;
+}
+
+.button:last-child {
+  border-top-right-radius: 5px;
+  border-bottom-right-radius: 5px;
+}
+
+.button.pressed {
+  background: #FFF;
+}
+
+.CodeMirror-sizer {
+  padding-bottom: 400px;
+}
+
+.CodeMirror {
+  border-left: 1px solid #999;
+  padding: 0 4px;
+  font: 12px 'Bitstream Vera Sans Mono', 'DejaVu Sans Mono', Monaco, Consolas, monospace !important;
+}
+
+.title {
+  border-left: 1px solid #999;
+  position: absolute;
+  top: 40px;
+  height: 40px;
+  font: bold 16px 'Helvetica Neue', Helvetica, sans-serif;
+  padding: 8px;
+}
+
+#topbar, .title {
+  cursor: default;
+  -webkit-user-select: none;
+  -moz-user-select: -moz-none;
 }
 
     </style>
+    <link rel="stylesheet" href="codemirror.css">
   </head>
   <body>
-    <div id="left">
-      <h2>Input</h2>
-      <div class="textarea"><textarea id="input">
-class Vector {
-  double x;
-  double y;
-
-  owned Vector add(Vector other) {
-    return new Vector(x + other.x, y + other.y);
-  }
-}
-
-class Link {
-  int data;
-  owned Link next = null;
-}
-
-class B : A {
-  over void foo() {}
-  int y;
-}
-
-class A {
-  void foo() {}
-  int x;
-}
-
-int main() {
-  owned Vector a = new Vector(1, 2);
-  owned Vector b = new Vector(3, 4);
-
-  // Swap a and b
-  owned Vector c = a;
-  a = b;
-  b = c;
-
-  // Convert an owned pointer to a raw pointer
-  shared Vector d = a.add(b);
-
-  // Build a linked list and traverse it
-  owned Link head = new Link(100);
-  head.next = new Link(200);
-  head.next.next = new Link(300);
-  Link link = head;
-  while (link != null) link = link.next;
-
-  // Shared pointer creation is optimized with make_shared
-  shared Vector foo = new Vector(1, 2);
-
-  // Need generated virtual destructor here
-  owned B e = new B(1, 2);
-  owned A f = e;
-
-  return 0;
-}
-</textarea></div>
-    </div>
-    <div id="right">
-      <h2>Output</h2>
-      <div class="textarea"><textarea id="output" readonly></textarea></div>
-    </div>
-
+    <div id="topbar"></div>
     <script src="node_modules/source-map-support/source-map-support.browser.js"></script>
     <script src="node_modules/cppcodegen/cppcodegen.js"></script>
     <script src="node_modules/esprima/esprima.js"></script>
     <script src="escodegen.browser.js"></script>
+    <script src="codemirror.js"></script>
     <script src="compiled.js"></script>
     <script>
 
-function printToken(token, indent) {
-  return indent +
-    token.kind +
-    ' ' + JSON.stringify(token.text) +
-    (token.children ? token.children.map(function(token) {
-      return '\n' + printToken(token, indent + '  ');
-    }).join('') : '');
+var example = [
+  'class Entity {',
+  '  double x = 0;',
+  '  double y = 0;',
+  '  double vx = 0;',
+  '  double vy = 0;',
+  '  shared World world;',
+  '',
+  '  void update(double seconds);',
+  '}',
+  '',
+  'class PlayerEntity : Entity {',
+  '  bool left = false;',
+  '  bool right = false;',
+  '  bool jump = false;',
+  '',
+  '  over void update(double seconds) {',
+  '    bool isOnGround = world.isOnGround(this);',
+  '',
+  '    // Update velocity',
+  '    vx = left && !right ? -15 : !left && right ? 15 : 0;',
+  '    if (jump && isOnGround) vy = 50;',
+  '    else vy = vy + world.gravity * seconds;',
+  '',
+  '    // Update position',
+  '    x = x + vx * seconds;',
+  '    y = y + vy * seconds;',
+  '    if (isOnGround && vy < 0) y = 0;',
+  '  }',
+  '}',
+  '',
+  'class World {',
+  '  double gravity = -10;',
+  '  owned PlayerEntity player = null;',
+  '',
+  '  bool isOnGround(Entity entity) {',
+  '    return entity.y <= 0;',
+  '  }',
+  '}',
+  '',
+  'int main() {',
+  '  shared World world = new World();',
+  '  world.player = new PlayerEntity(world);',
+  '  return 0;',
+  '}',
+].join('\n') + '\n';
+
+CodeMirror.defineMode('custom', function(config, parserConfig) {
+  return {
+    startState: function(basecolumn) {
+      return { indentation: 0, lastChar: '' };
+    },
+
+    token: function(stream, state) {
+      stream.skipToEnd();
+      state.indentation = stream.indentation();
+      state.lastChar = stream.current().slice(-1);
+    },
+
+    indent: function(state, textAfter) {
+      var lastChar = textAfter.slice(-1);
+      var shouldIndent = state.lastChar === '{';
+      var shouldDedent = lastChar === '}';
+      if (shouldDedent) return state.indentation - 2;
+      if (shouldIndent) return state.indentation + 2;
+      return CodeMirror.Pass;
+    },
+
+    electricChars: '{}'
+  };
+});
+
+function Panel(options) {
+  var that = this;
+
+  this.name = options.name;
+  this.isVisible = options.isVisible;
+  this.editor = CodeMirror(document.body, {
+    mode: 'custom',
+    tabSize: 2,
+    lineWrapping: true,
+    readOnly: options.readOnly,
+    autofocus: !options.readOnly
+  });
+
+  this.title = document.createElement('div');
+  this.title.className = 'title';
+  this.title.textContent = options.name;
+  document.body.appendChild(this.title);
+
+  this.button = document.createElement('div');
+  this.button.textContent = options.name;
+  this.button.onmousedown = function() {
+    that.isVisible = !that.isVisible;
+    distribute();
+    recompile();
+  };
+  topbar.appendChild(this.button);
+}
+
+Panel.prototype.layout = function() {
+  this.button.className = this.isVisible ? 'button pressed' : 'button';
+  this.title.style.display = this.editor.getWrapperElement().style.display = this.isVisible ? 'block' : 'none';
+};
+
+Panel.prototype.setTextIfVisible = function(callback) {
+  if (this.isVisible) {
+    var text = callback(); // Be lazy for speed
+    this.editor.setValue(text);
+  }
+};
+
+function distribute() {
+  var visible = panels.filter(function(p) { return p.isVisible; });
+  visible.forEach(function(p, i) {
+    var left = Math.round(i / visible.length * innerWidth);
+    var top = 80;
+    var right = Math.round((i + 1) / visible.length * innerWidth);
+    var bottom = innerHeight;
+    var editor = p.editor.getWrapperElement().style;
+    var title = p.title.style;
+    editor.position = 'absolute';
+    editor.left = title.left = left - 1 + 'px'; // 1px border on .CodeMirror
+    editor.top = top + 'px';
+    editor.width = title.width = right - left - 9 + 'px'; // 4px padding on .CodeMirror and 1px border on next .CodeMirror
+    editor.height = bottom - top + 'px';
+  });
+  panels.forEach(function(p) { p.layout(); });
+}
+
+function panelNamed(name) {
+  return panels.filter(function(p) { return p.name === name })[0];
+}
+
+function printToken(token) {
+  return token.kind + ' ' + JSON.stringify(token.text);
 }
 
 function filter(key, value) {
-  if (value instanceof Type) {
-    return;
-  }
-  if (key === 'intrinsic') {
-    for (var name in Intrinsics) {
-      if (value === Intrinsics[name]) {
-        return name;
-      }
-    }
-  }
   if (key !== 'range' &&
       key !== 'symbol' &&
       key !== 'scope' &&
@@ -187,33 +248,46 @@ function filter(key, value) {
   }
 }
 
-function changed() {
-  if (input.value === old) return;
-  old = input.value;
+function recompile() {
   try {
-    var compiler = new Compiler(old);
-    output.style.color = '#FFF';
-    output.value = []
-      .concat(compiler.log.diagnostics)
-      .concat(!compiler.log.hasErrors ? '// JavaScript\n' + OutputJS.generate(compiler.module) + '\n' : [])
-      .concat(!compiler.log.hasErrors ? '// C++\n' + OutputCPP.generate(compiler.module) + '\n' : [])
-      .concat(compiler.module ? '// AST\n' + JSON.stringify(compiler.module, filter, 2) + '\n' : [])
-      .concat(compiler.tokens ? '// Tokens\n' + compiler.tokens.map(function(token) { return printToken(token, ''); }).join('\n') : [])
-      .join('\n');
+    var compiler = new Compiler(panelNamed('BitScript').editor.getValue());
+    if (compiler.log.hasErrors) {
+      throw compiler.log.diagnostics.join('\n');
+    }
+    panelNamed('JavaScript').setTextIfVisible(function() { return OutputJS.generate(compiler.module) + '\n'; });
+    panelNamed('C++').setTextIfVisible(function() { return OutputCPP.generate(compiler.module) + '\n'; });
+    panelNamed('AST').setTextIfVisible(function() { return JSON.stringify(compiler.module, filter, 2); });
+    panelNamed('Tokens').setTextIfVisible(function() { return compiler.tokens.map(printToken).join('\n'); });
   } catch (e) {
-    output.style.color = '#F00';
-    output.value = e.stack || e;
+    panels
+      .filter(function(p) { return p.name !== 'BitScript'; })
+      .map(function(p, i) { p.editor.setValue(i === 0 ? (e.stack || e) + '' : ''); });
   }
 }
 
-var old = null;
-input.oninput = input.onkeydown = input.onkeyup = changed;
-input.focus();
-changed();
+function changed() {
+  var newValue = panelNamed('BitScript').editor.getValue();
+  if (newValue !== oldValue) {
+    oldValue = newValue;
+    recompile();
+  }
+}
 
-window.onfocus = function() {
-  input.focus();
-};
+var oldValue = null;
+var compiler = null;
+var panels = [
+  new Panel({ name: 'BitScript', isVisible: true, readOnly: false }),
+  new Panel({ name: 'JavaScript', isVisible: true, readOnly: true }),
+  new Panel({ name: 'C++', isVisible: true, readOnly: true }),
+  new Panel({ name: 'AST', isVisible: false, readOnly: true }),
+  new Panel({ name: 'Tokens', isVisible: false, readOnly: true })
+];
+
+panelNamed('BitScript').editor.on('change', changed);
+panelNamed('BitScript').editor.setValue(example);
+window.onresize = distribute;
+distribute();
+changed();
 
     </script>
   </body>

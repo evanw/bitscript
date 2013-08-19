@@ -196,7 +196,7 @@ class OutputJS implements StatementVisitor<Object>, DeclarationVisitor<Object>, 
   }
 
   generateMemberFunctions(node: ObjectDeclaration): Object[] {
-    return node.block.statements.filter(n => n instanceof FunctionDeclaration).map(n => {
+    return node.block.statements.filter(n => n instanceof FunctionDeclaration && n.block !== null).map(n => {
       var result: any = this.visitFunctionDeclaration(n);
       result.type = 'FunctionExpression';
       result.id = null;
