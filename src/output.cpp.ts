@@ -51,9 +51,31 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
     if (output.needListIndexOf) {
       listStuff += [
         'template <typename T>',
-        'int List_indexOf(std::vector<T> *list, T t) {',
-        '  typename std::vector<T>::iterator i = std::find(list->begin(), list->end(), t);',
-        '  return i == list->end() ? -1 : i - list->begin();',
+        'int List_indexOf(std::vector<std::unique_ptr<T>> *list, T *t) {',
+        '  for (typename std::vector<std::unique_ptr<T>>::iterator i = list->begin(); i != list->end(); i++) {',
+        '    if (i->get() == t) {',
+        '      return i - list->begin();',
+        '    }',
+        '  }',
+        '  return -1;',
+        '}',
+        'template <typename T>',
+        'int List_indexOf(std::vector<std::shared_ptr<T>> *list, T *t) {',
+        '  for (typename std::vector<std::shared_ptr<T>>::iterator i = list->begin(); i != list->end(); i++) {',
+        '    if (i->get() == t) {',
+        '      return i - list->begin();',
+        '    }',
+        '  }',
+        '  return -1;',
+        '}',
+        'template <typename T>',
+        'int List_indexOf(std::vector<T *> *list, T *t) {',
+        '  for (typename std::vector<T *>::iterator i = list->begin(); i != list->end(); i++) {',
+        '    if (*i == t) {',
+        '      return i - list->begin();',
+        '    }',
+        '  }',
+        '  return -1;',
         '}',
       ].join('\n') + '\n';
     }
@@ -73,8 +95,7 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
         '}',
       ].join('\n') + '\n';
     }
-
-    return listStuff + result;
+    return result.replace(/\n(?!#)/, '\n' + listStuff);
   }
 
   defaultForType(type: WrappedType): Object {
@@ -758,7 +779,7 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
 
         case NativeTypes.LIST_GET:
           assert(args.length === 1);
-          return {
+          var result: Object = {
             kind: 'BinaryExpression',
             operator: '[]',
             left: {
@@ -768,6 +789,20 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
             },
             right: args[0]
           };
+          assert(member.value.computedType.substitutions.length === 1);
+          if (!member.value.computedType.substitutions[0].type.isRawPointer()) {
+            return {
+              kind: 'CallExpression',
+              callee: {
+                kind: 'MemberExpression',
+                operator: '.',
+                object: result,
+                member: { kind: 'Identifier', name: 'get' }
+              },
+              arguments: []
+            };
+          }
+          return result;
 
         case NativeTypes.LIST_SET:
           assert(args.length === 2);

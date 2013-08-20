@@ -123,7 +123,7 @@ class TypeLogic {
 
           // Stripping shared may also be useful for performance reasons
           if (type.isUnshared()) {
-            result.modifiers &= ~TypeModifier.UNSHARED;
+            result.modifiers &= ~TypeModifier.SHARED;
           }
 
           return result;
