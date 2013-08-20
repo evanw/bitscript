@@ -423,15 +423,10 @@ class OutputJS implements StatementVisitor<Object>, DeclarationVisitor<Object>, 
         case NativeTypes.LIST_GET:
           assert(node.args.length === 1);
           return {
-            type: 'LogicalExpression',
-            operator: '||',
-              left: {
-              type: 'MemberExpression',
-              object: member.value.acceptExpressionVisitor(this),
-              property: node.args[0].acceptExpressionVisitor(this),
-              computed: true
-            },
-            right: { type: 'Literal', value: null }
+            type: 'MemberExpression',
+            object: member.value.acceptExpressionVisitor(this),
+            property: node.args[0].acceptExpressionVisitor(this),
+            computed: true
           };
 
         case NativeTypes.LIST_SET:
@@ -463,18 +458,13 @@ class OutputJS implements StatementVisitor<Object>, DeclarationVisitor<Object>, 
         case NativeTypes.LIST_POP:
           assert(node.args.length === 0);
           return {
-            type: 'LogicalExpression',
-            operator: '||',
-            left: {
-              type: 'CallExpression',
-              callee: {
-                type: 'MemberExpression',
-                object: member.value.acceptExpressionVisitor(this),
-                property: { kind: 'Identifier', name: 'pop' }
-              },
-              arguments: []
+            type: 'CallExpression',
+            callee: {
+              type: 'MemberExpression',
+              object: member.value.acceptExpressionVisitor(this),
+              property: { kind: 'Identifier', name: 'pop' }
             },
-            right: { type: 'Literal', value: null }
+            arguments: []
           };
 
         case NativeTypes.LIST_UNSHIFT:
@@ -492,18 +482,13 @@ class OutputJS implements StatementVisitor<Object>, DeclarationVisitor<Object>, 
         case NativeTypes.LIST_SHIFT:
           assert(node.args.length === 0);
           return {
-            type: 'LogicalExpression',
-            operator: '||',
-            left: {
-              type: 'CallExpression',
-              callee: {
-                type: 'MemberExpression',
-                object: member.value.acceptExpressionVisitor(this),
-                property: { kind: 'Identifier', name: 'shift' }
-              },
-              arguments: []
+            type: 'CallExpression',
+            callee: {
+              type: 'MemberExpression',
+              object: member.value.acceptExpressionVisitor(this),
+              property: { kind: 'Identifier', name: 'shift' }
             },
-            right: { type: 'Literal', value: null }
+            arguments: []
           };
 
         case NativeTypes.LIST_INDEX_OF:
@@ -548,6 +533,9 @@ class OutputJS implements StatementVisitor<Object>, DeclarationVisitor<Object>, 
               { type: 'Literal', value: 1 }
             ]
           };
+
+        default:
+          assert(false);
         }
       }
     }

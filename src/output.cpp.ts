@@ -594,6 +594,9 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
             kind: 'Identifier',
             name: 'Math_random'
           };
+
+        default:
+          assert(false);
       }
     }
 
@@ -640,10 +643,11 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
 
   visitCallExpression(node: CallExpression): Object {
     var functionType: FunctionType = node.value.computedType.asFunction();
+    var args: Object[] = node.args.map((n, i) => this.insertImplicitConversion(n, functionType.args[i]));
     return {
       kind: 'CallExpression',
       callee: node.value.acceptExpressionVisitor(this),
-      arguments: node.args.map((n, i) => this.insertImplicitConversion(n, functionType.args[i]))
+      arguments: args
     };
   }
 
