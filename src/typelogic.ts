@@ -105,6 +105,9 @@ class TypeLogic {
   }
 
   static substitute(type: WrappedType, substitutions: Substitution[]): WrappedType {
+    if (substitutions.length === 0) {
+      return type;
+    }
     assert(type.substitutions.length === 0);
 
     if (type.innerType instanceof TypeParameter) {

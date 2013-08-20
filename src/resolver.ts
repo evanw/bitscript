@@ -739,7 +739,7 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
   }
 
   visitNullExpression(node: NullExpression) {
-    node.computedType = SpecialType.NULL.wrap(TypeModifier.INSTANCE | TypeModifier.OWNED);
+    node.computedType = SpecialType.NULL.wrap(TypeModifier.INSTANCE);
   }
 
   visitThisExpression(node: ThisExpression) {

@@ -141,7 +141,7 @@ class WrappedType {
   }
 
   isPointer(): boolean {
-    return this.isObject();
+    return this.isObject() || this.isNull();
   }
 
   isRawPointer(): boolean {
