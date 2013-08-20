@@ -722,7 +722,8 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
       return;
     }
 
-    node.computedType = node.symbol.type;
+    // Substitute the type parameters from the object into the member
+    node.computedType = TypeLogic.substitute(node.symbol.type, node.value.computedType.substitutions);
   }
 
   visitIntExpression(node: IntExpression) {
@@ -779,10 +780,10 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
       return;
     }
 
-    // New only works on object types
+    // New only works on raw object types
     var objectType: ObjectType = node.type.computedType.asObject();
-    if (objectType === null) {
-      semanticErrorInvalidNew(this.log, node.range, node.type.computedType);
+    if (objectType === null || !node.type.computedType.isRawPointer()) {
+      semanticErrorInvalidNew(this.log, node.type.range, node.type.computedType);
       return;
     }
 
@@ -829,26 +830,30 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
       return;
     }
 
-    // Can only parameterize list for now
-    if (node.type.computedType.innerType !== NativeTypes.LIST) {
+    // The type must have type parameters
+    if (!TypeLogic.hasTypeParameters(node.type.computedType)) {
       semanticErrorCannotParameterize(this.log, node.type.range, node.type.computedType);
       return;
     }
 
-    // Special-case for lists
-    if (node.parameters.length !== 1) {
-      semanticErrorParameterCount(this.log, node.range, 1, node.parameters.length);
+    // Validate parameter count
+    var type: Type = node.type.computedType.innerType;
+    if (node.parameters.length !== type.parameters.length) {
+      semanticErrorParameterCount(this.log, node.range, type.parameters.length, node.parameters.length);
       return;
     }
 
-    // Only allow object types for now so we can return null from get()
-    var parameter: WrappedType = node.parameters[0].computedType;
-    if (!parameter.isObject()) {
-      semanticErrorBadParameter(this.log, node.parameters[0].range, parameter);
-      return;
+    // Only allow object types since null can convert to and from type parameters
+    for (var i = 0; i < node.parameters.length; i++) {
+      var n: Expression = node.parameters[i];
+      if (!n.computedType.isObject()) {
+        semanticErrorBadParameter(this.log, n.range, n.computedType);
+        return;
+      }
     }
 
-    node.computedType = new WrappedType(node.type.computedType.innerType, 0);
-    node.computedType.listItemType = parameter;
+    // Create the substitution environment
+    var substitutions: Substitution[] = type.parameters.map((p, i) => new Substitution(p, node.parameters[i].computedType));
+    node.computedType = TypeLogic.substitute(node.type.computedType, substitutions);
   }
 }

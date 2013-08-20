@@ -52,6 +52,8 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
     };
 
     if (objectType === NativeTypes.LIST) {
+      assert(type.substitutions.length === 1);
+      assert(type.substitutions[0].parameter === NativeTypes.LIST_T);
       result = {
         kind: 'SpecializeTemplate',
         template: {
@@ -59,7 +61,7 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
           inner: { kind: 'Identifier', name: 'std' },
           member: { kind: 'Identifier', name: 'vector' }
         },
-        parameters: [this.visitType(type.listItemType)]
+        parameters: [this.visitType(type.substitutions[0].type)]
       };
     }
 
@@ -661,7 +663,7 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
       },
       arguments: [{
         kind: 'NewExpression',
-        callee: node.type.acceptExpressionVisitor(this),
+        callee: this.visitType(node.type.computedType).inner,
         arguments: node.args.map((n, i) => this.insertImplicitConversion(n, functionType.args[i]))
       }]
     };

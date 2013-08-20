@@ -415,6 +415,37 @@ class OutputJS implements StatementVisitor<Object>, DeclarationVisitor<Object>, 
   }
 
   visitCallExpression(node: CallExpression): Object {
+    if (node.value instanceof MemberExpression) {
+      var member: MemberExpression = <MemberExpression>node.value;
+      if (member.value.computedType.innerType === NativeTypes.LIST) {
+        switch (member.symbol) {
+
+        case NativeTypes.LIST_GET:
+          assert(node.args.length === 1);
+          return {
+            type: 'MemberExpression',
+            object: member.value.acceptExpressionVisitor(this),
+            property: node.args[0].acceptExpressionVisitor(this),
+            computed: true
+          };
+
+        case NativeTypes.LIST_SET:
+          assert(node.args.length === 2);
+          return {
+            type: 'AssignmentExpression',
+            operator: '=',
+            left: {
+              type: 'MemberExpression',
+              object: member.value.acceptExpressionVisitor(this),
+              property: node.args[0].acceptExpressionVisitor(this),
+              computed: true
+            },
+            right: node.args[1].acceptExpressionVisitor(this)
+          };
+        }
+      }
+    }
+
     return {
       type: 'CallExpression',
       callee: node.value.acceptExpressionVisitor(this),
@@ -423,6 +454,14 @@ class OutputJS implements StatementVisitor<Object>, DeclarationVisitor<Object>, 
   }
 
   visitNewExpression(node: NewExpression): Object {
+    if (node.type.computedType.innerType === NativeTypes.LIST) {
+      assert(node.args.length === 0);
+      return {
+        type: 'ArrayExpression',
+        elements: []
+      };
+    }
+
     return {
       type: 'NewExpression',
       callee: node.type.acceptExpressionVisitor(this),

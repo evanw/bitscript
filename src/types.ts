@@ -3,11 +3,15 @@ enum TypeModifier {
   SHARED = 2, // Is a reference-counted pointer
   STORAGE = 4, // Can this be stored to (is this an L-value)?
   INSTANCE = 8, // Is this an instance of the type instead of the type itself?
+  UNOWNED = 16, // Should this type parameter be stripped of OWNED here?
+  UNSHARED = 32, // Should this type parameter be stripped of SHARED here?
 }
 
 class Type {
+  parameters: TypeParameter[] = [];
+
   wrap(modifiers: number): WrappedType {
-    return new WrappedType(this, modifiers);
+    return new WrappedType(this, modifiers, []);
   }
 
   asString(): string {
@@ -29,7 +33,6 @@ class SpecialType extends Type {
   static ERROR: SpecialType = new SpecialType('<error>');
   static DOUBLE: SpecialType = new SpecialType('double');
   static CIRCULAR: SpecialType = new SpecialType('<circular>');
-  static LIST_ITEM: SpecialType = new SpecialType('<list-item>');
 
   asString(): string {
     return this.name;
@@ -87,14 +90,29 @@ class ObjectType extends Type {
   }
 }
 
-class WrappedType {
-  // The type of a list if innerType is NativeType.LIST (this is a
-  // bit of a hack until the language has generic types for real)
-  listItemType: WrappedType = null;
+class TypeParameter extends Type {
+  constructor(
+    public name: string) {
+    super();
+  }
 
+  asString(): string {
+    return this.name;
+  }
+}
+
+class Substitution {
+  constructor(
+    public parameter: TypeParameter,
+    public type: WrappedType) {
+  }
+}
+
+class WrappedType {
   constructor(
     public innerType: Type,
-    public modifiers: number) {
+    public modifiers: number,
+    public substitutions: Substitution[]) {
     assert(innerType !== null);
   }
 
@@ -114,6 +132,14 @@ class WrappedType {
     return (this.modifiers & TypeModifier.INSTANCE) !== 0;
   }
 
+  isUnowned(): boolean {
+    return (this.modifiers & TypeModifier.UNOWNED) !== 0;
+  }
+
+  isUnshared(): boolean {
+    return (this.modifiers & TypeModifier.UNSHARED) !== 0;
+  }
+
   isPointer(): boolean {
     return this.isObject();
   }
@@ -128,6 +154,10 @@ class WrappedType {
 
   isCircular(): boolean {
     return this.innerType === SpecialType.CIRCULAR;
+  }
+
+  isNull(): boolean {
+    return this.innerType === SpecialType.NULL;
   }
 
   isVoid(): boolean {
@@ -171,7 +201,8 @@ class WrappedType {
       (this.modifiers & TypeModifier.OWNED ? 'owned ' : '') +
       (this.modifiers & TypeModifier.SHARED ? 'shared ' : '') +
       this.innerType.asString() +
-      (this.listItemType !== null ? '<' + this.listItemType.asString() + '>' : '')
+      (this.substitutions.length > 0 ? '<' + TypeLogic.filterSubstitutionsForType(
+        this.substitutions, this.innerType).map(s => s.type.asString()).join(', ') + '>' : '')
     );
   }
 
@@ -180,8 +211,6 @@ class WrappedType {
   }
 
   wrapWith(flag: number): WrappedType {
-    var type: WrappedType = new WrappedType(this.innerType, this.modifiers | flag);
-    type.listItemType = this.listItemType;
-    return type;
+    return new WrappedType(this.innerType, this.modifiers | flag, this.substitutions);
   }
 }
