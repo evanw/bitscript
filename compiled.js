@@ -205,6 +205,26 @@ function semanticErrorOverrideDifferentTypes(log, range, name, base, derived) {
 function semanticErrorAbstractNew(log, node) {
     log.error(node.range, 'cannot use new on abstract ' + node.computedType);
 }
+
+function semanticErrorCannotParameterize(log, range, type) {
+    log.error(range, 'cannot parameterize ' + type);
+}
+
+function semanticErrorParameterCount(log, range, expected, found) {
+    log.error(range, 'expected ' + expected + ' type parameter' + (expected === 1 ? '' : 's') + ' but found ' + found + ' type parameter' + (found === 1 ? '' : 's'));
+}
+
+function semanticErrorUnparameterizedExpression(log, range, type) {
+    log.error(range, 'cannot use unparameterized ' + type);
+}
+
+function semanticErrorParameterizedExpression(log, range, type) {
+    log.error(range, 'cannot use parameterized ' + type);
+}
+
+function semanticErrorBadParameter(log, range, type) {
+    log.error(range, 'cannot use ' + type + ' as a type parameter');
+}
 var Token = (function () {
     function Token(range, kind, text) {
         this.range = range;
@@ -350,6 +370,71 @@ function tokenize(log, source) {
     tokens.push(new Token(new SourceRange(source, marker, marker), 'END', ''));
     return tokens;
 }
+
+function prepareTokens(tokens) {
+    var tokenStack = [];
+    var indexStack = [];
+
+    nextToken:
+    for (var i = 0; i < tokens.length; i++) {
+        var token = tokens[i];
+
+        while (tokenStack.length > 0) {
+            var top = tokenStack[tokenStack.length - 1];
+
+            if (top.kind === '<' && token.kind !== '<' && token.kind[0] !== '>' && token.kind !== 'IDENTIFIER' && token.kind !== ',' && token.kind !== 'owned' && token.kind !== 'shared') {
+                tokenStack.pop();
+                indexStack.pop();
+            } else {
+                break;
+            }
+        }
+
+        if (token.kind === '(' || token.kind === '{' || token.kind === '[' || token.kind === '<') {
+            tokenStack.push(token);
+            indexStack.push(i);
+            continue;
+        }
+
+        if (token.kind === ')' || token.kind === '}' || token.kind === ']' || token.kind[0] === '>') {
+            while (tokenStack.length > 0) {
+                var top = tokenStack[tokenStack.length - 1];
+
+                if (token.kind[0] === '>' && top.kind !== '<') {
+                    break;
+                }
+
+                if (top.kind === '<' && token.kind[0] !== '>') {
+                    tokenStack.pop();
+                    indexStack.pop();
+                    continue;
+                }
+
+                if (token.kind[0] === '>' && token.kind.length > 1) {
+                    var start = token.range.start;
+                    var middle = new Marker(start.index + 1, start.line, start.column + 1);
+                    tokens.splice(i + 1, 0, new Token(new SourceRange(token.range.source, middle, token.range.end), token.kind.slice(1), token.text.slice(1)));
+                    token.range.end = middle;
+                    token.kind = '>';
+                    token.text = '>';
+                }
+
+                // Consume the matching token
+                var match = tokenStack.pop();
+                var index = indexStack.pop();
+
+                if (match.kind === '<' && token.kind === '>') {
+                    match.kind = 'START_PARAMETER_LIST';
+                    token.kind = 'END_PARAMETER_LIST';
+                }
+
+                continue nextToken;
+            }
+        }
+    }
+
+    return tokens;
+}
 var __extends = this.__extends || function (d, b) {
     for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p];
     function __() { this.constructor = d; }
@@ -362,13 +447,16 @@ var TypeModifier;
     TypeModifier[TypeModifier["SHARED"] = 2] = "SHARED";
     TypeModifier[TypeModifier["STORAGE"] = 4] = "STORAGE";
     TypeModifier[TypeModifier["INSTANCE"] = 8] = "INSTANCE";
+    TypeModifier[TypeModifier["UNOWNED"] = 16] = "UNOWNED";
+    TypeModifier[TypeModifier["UNSHARED"] = 32] = "UNSHARED";
 })(TypeModifier || (TypeModifier = {}));
 
 var Type = (function () {
     function Type() {
+        this.parameters = [];
     }
     Type.prototype.wrap = function (modifiers) {
-        return new WrappedType(this, modifiers);
+        return new WrappedType(this, modifiers, []);
     };
 
     Type.prototype.asString = function () {
@@ -421,8 +509,12 @@ var ObjectType = (function (_super) {
         this.constructorTypeInitializer = null;
         this.cachedConstructorType = null;
         this.baseType = null;
+        // Does some other object type have this as a base?
         this.hasDerivedTypes = false;
+        // Does this object type have a (possibly inherited) function without a body?
         this.isAbstract = false;
+        // Is this object type allowed to be the base class of another object type?
+        this.isSealed = false;
     }
     // Lazily compute the constructor type when it's needed instead of when the
     // class is first initialized to get around tricky ordering problems:
@@ -444,10 +536,31 @@ var ObjectType = (function (_super) {
     return ObjectType;
 })(Type);
 
+var TypeParameter = (function (_super) {
+    __extends(TypeParameter, _super);
+    function TypeParameter(name) {
+        _super.call(this);
+        this.name = name;
+    }
+    TypeParameter.prototype.asString = function () {
+        return this.name;
+    };
+    return TypeParameter;
+})(Type);
+
+var Substitution = (function () {
+    function Substitution(parameter, type) {
+        this.parameter = parameter;
+        this.type = type;
+    }
+    return Substitution;
+})();
+
 var WrappedType = (function () {
-    function WrappedType(innerType, modifiers) {
+    function WrappedType(innerType, modifiers, substitutions) {
         this.innerType = innerType;
         this.modifiers = modifiers;
+        this.substitutions = substitutions;
         assert(innerType !== null);
     }
     WrappedType.prototype.isOwned = function () {
@@ -466,8 +579,16 @@ var WrappedType = (function () {
         return (this.modifiers & TypeModifier.INSTANCE) !== 0;
     };
 
+    WrappedType.prototype.isUnowned = function () {
+        return (this.modifiers & TypeModifier.UNOWNED) !== 0;
+    };
+
+    WrappedType.prototype.isUnshared = function () {
+        return (this.modifiers & TypeModifier.UNSHARED) !== 0;
+    };
+
     WrappedType.prototype.isPointer = function () {
-        return this.isObject();
+        return this.isObject() || this.isNull();
     };
 
     WrappedType.prototype.isRawPointer = function () {
@@ -480,6 +601,10 @@ var WrappedType = (function () {
 
     WrappedType.prototype.isCircular = function () {
         return this.innerType === SpecialType.CIRCULAR;
+    };
+
+    WrappedType.prototype.isNull = function () {
+        return this.innerType === SpecialType.NULL;
     };
 
     WrappedType.prototype.isVoid = function () {
@@ -519,15 +644,17 @@ var WrappedType = (function () {
     };
 
     WrappedType.prototype.asString = function () {
-        return ((this.modifiers & TypeModifier.OWNED ? 'owned ' : '') + (this.modifiers & TypeModifier.SHARED ? 'shared ' : '') + this.innerType.asString());
+        return ((this.modifiers & TypeModifier.OWNED ? 'owned ' : '') + (this.modifiers & TypeModifier.SHARED ? 'shared ' : '') + this.innerType.asString() + (this.substitutions.length > 0 ? '<' + TypeLogic.filterSubstitutionsForType(this.substitutions, this.innerType).map(function (s) {
+            return s.type.asString();
+        }).join(', ') + '>' : ''));
     };
 
     WrappedType.prototype.toString = function () {
-        return (this.modifiers & TypeModifier.INSTANCE ? 'value of type ' : 'type ') + this.asString();
+        return (this.modifiers & TypeModifier.INSTANCE ? (this.isPointer() ? 'pointer' : 'value') + ' of type ' : 'type ') + this.asString();
     };
 
     WrappedType.prototype.wrapWith = function (flag) {
-        return new WrappedType(this.innerType, this.modifiers | flag);
+        return new WrappedType(this.innerType, this.modifiers | flag, this.substitutions);
     };
     return WrappedType;
 })();
@@ -610,6 +737,8 @@ var NativeTypes = (function () {
         })).wrap(TypeModifier.INSTANCE);
     };
     NativeTypes.MATH = new ObjectType('Math', new Scope(null));
+    NativeTypes.LIST = new ObjectType('List', new Scope(null));
+    NativeTypes.LIST_T = new TypeParameter('T');
     return NativeTypes;
 })();
 
@@ -635,6 +764,25 @@ NativeTypes.MATH.scope.define('pow', NativeTypes.createFunction(SpecialType.DOUB
 NativeTypes.MATH.scope.define('min', NativeTypes.createFunction(SpecialType.DOUBLE, [SpecialType.DOUBLE, SpecialType.DOUBLE]));
 NativeTypes.MATH.scope.define('max', NativeTypes.createFunction(SpecialType.DOUBLE, [SpecialType.DOUBLE, SpecialType.DOUBLE]));
 NativeTypes.MATH.scope.define('random', NativeTypes.createFunction(SpecialType.DOUBLE, []));
+
+// Lists are special-cased for now
+NativeTypes.LIST.isSealed = true;
+NativeTypes.LIST.cachedConstructorType = new FunctionType(null, []);
+NativeTypes.LIST.parameters.push(NativeTypes.LIST_T);
+NativeTypes.LIST_LENGTH = NativeTypes.LIST.scope.define('length', SpecialType.INT.wrap(TypeModifier.INSTANCE));
+NativeTypes.LIST_GET = NativeTypes.LIST.scope.define('get', NativeTypes.createFunction(NativeTypes.LIST_T, [SpecialType.INT]));
+NativeTypes.LIST_SET = NativeTypes.LIST.scope.define('set', NativeTypes.createFunction(SpecialType.VOID, [SpecialType.INT, NativeTypes.LIST_T]));
+NativeTypes.LIST_PUSH = NativeTypes.LIST.scope.define('push', NativeTypes.createFunction(SpecialType.VOID, [NativeTypes.LIST_T]));
+NativeTypes.LIST_POP = NativeTypes.LIST.scope.define('pop', NativeTypes.createFunction(NativeTypes.LIST_T, []));
+NativeTypes.LIST_UNSHIFT = NativeTypes.LIST.scope.define('unshift', NativeTypes.createFunction(SpecialType.VOID, [NativeTypes.LIST_T]));
+NativeTypes.LIST_SHIFT = NativeTypes.LIST.scope.define('shift', NativeTypes.createFunction(NativeTypes.LIST_T, []));
+NativeTypes.LIST_INDEX_OF = NativeTypes.LIST.scope.define('indexOf', NativeTypes.createFunction(SpecialType.INT, [NativeTypes.LIST_T]));
+NativeTypes.LIST_INSERT = NativeTypes.LIST.scope.define('insert', NativeTypes.createFunction(SpecialType.VOID, [SpecialType.INT, NativeTypes.LIST_T]));
+NativeTypes.LIST_REMOVE = NativeTypes.LIST.scope.define('remove', NativeTypes.createFunction(SpecialType.VOID, [SpecialType.INT]));
+
+// Getting an element from a list of owned pointers should not steal ownership
+NativeTypes.LIST_GET.type.asFunction().result.modifiers |= TypeModifier.UNOWNED | TypeModifier.UNSHARED;
+NativeTypes.LIST_INDEX_OF.type.asFunction().args[0].modifiers |= TypeModifier.UNOWNED | TypeModifier.UNSHARED;
 ////////////////////////////////////////////////////////////////////////////////
 // Nodes
 ////////////////////////////////////////////////////////////////////////////////
@@ -1013,6 +1161,19 @@ var TypeModifierExpression = (function (_super) {
         return visitor.visitTypeModifierExpression(this);
     };
     return TypeModifierExpression;
+})(Expression);
+
+var TypeParameterExpression = (function (_super) {
+    __extends(TypeParameterExpression, _super);
+    function TypeParameterExpression(range, type, parameters) {
+        _super.call(this, range);
+        this.type = type;
+        this.parameters = parameters;
+    }
+    TypeParameterExpression.prototype.acceptExpressionVisitor = function (visitor) {
+        return visitor.visitTypeParameterExpression(this);
+    };
+    return TypeParameterExpression;
 })(Expression);
 function spanRange(start, end) {
     assert(start.source === end.source && start.start.index <= end.end.index);
@@ -1417,6 +1578,19 @@ function parseExpressions(context) {
     return values;
 }
 
+function parseTypes(context) {
+    var types = [];
+    while (!context.peek('END_PARAMETER_LIST')) {
+        if (types.length > 0 && !context.expect(','))
+            return null;
+        var type = parseType(context);
+        if (type === null)
+            return null;
+        types.push(type);
+    }
+    return types;
+}
+
 function buildUnaryPrefix(context, token, node) {
     return new UnaryExpression(spanRange(token.range, node.range), token.text, node);
 }
@@ -1535,6 +1709,17 @@ pratt.parselet('new', Power.LOWEST).prefix = function (context) {
     return new NewExpression(context.spanSince(token.range), type, args);
 };
 
+// Type parameter expression
+pratt.parselet('START_PARAMETER_LIST', Power.MEMBER).infix = function (context, left) {
+    var token = context.next();
+    var parameters = parseTypes(context);
+    if (parameters === null)
+        return null;
+    if (!context.expect('END_PARAMETER_LIST'))
+        return null;
+    return new TypeParameterExpression(context.spanSince(left.range), left, parameters);
+};
+
 function parse(log, tokens) {
     var context = new ParserContext(log, tokens);
     var range = context.current().range;
@@ -1593,19 +1778,27 @@ var TypeLogic = (function () {
     };
 
     TypeLogic.checkImplicitConversionTypes = function (from, to) {
-        var f = from.innerType;
-        var t = to.innerType;
-        if (f === SpecialType.INT && t === SpecialType.DOUBLE)
+        if (from.isInt() && to.isDouble())
             return true;
-        if (f === SpecialType.NULL && to.isPointer())
+        if (from.isNull() && to.isPointer())
             return true;
-        if (f instanceof ObjectType && t instanceof ObjectType) {
-            return TypeLogic.isBaseTypeOf(f, t);
+        if (from.isObject() && to.isObject()) {
+            return TypeLogic.isBaseTypeOf(from.asObject(), to.asObject());
         }
-        return TypeLogic.equal(f, t);
+        return TypeLogic.equal(from.innerType, to.innerType);
     };
 
     TypeLogic.checkImplicitConversionTypeModifiers = function (from, to) {
+        if (!from.isNull()) {
+            if (from.substitutions.length !== to.substitutions.length)
+                return false;
+            if (from.substitutions.some(function (f) {
+                return to.substitutions.every(function (t) {
+                    return f.parameter !== t.parameter || !TypeLogic.equalWrapped(f.type, t.type);
+                });
+            }))
+                return false;
+        }
         if (from.isRawPointer() && to.isRawPointer())
             return true;
         if (from.isOwned() && to.isPointer())
@@ -1626,10 +1819,8 @@ var TypeLogic = (function () {
             return b;
         if (TypeLogic.canImplicitlyConvert(b, a))
             return a;
-        if (a.innerType instanceof ObjectType && b.innerType instanceof ObjectType) {
-            var oa = a.innerType;
-            var ob = b.innerType;
-            var base = TypeLogic.commonBaseType(oa, ob);
+        if (a.isObject() && b.isObject()) {
+            var base = TypeLogic.commonBaseType(a.asObject(), b.asObject());
             if (base !== null) {
                 if (a.isRawPointer() || b.isRawPointer()) {
                     return base.wrap(TypeModifier.INSTANCE);
@@ -1642,6 +1833,75 @@ var TypeLogic = (function () {
             }
         }
         return null;
+    };
+
+    TypeLogic.hasTypeParameters = function (type) {
+        return type.innerType.parameters.length > 0;
+    };
+
+    TypeLogic.isParameterized = function (type) {
+        if (TypeLogic.hasTypeParameters(type)) {
+            if (type.innerType.parameters.some(function (p) {
+                return !type.substitutions.some(function (s) {
+                    return s.parameter === p;
+                });
+            })) {
+                return false;
+            }
+
+            // Recursively check the substitutions
+            return type.substitutions.every(function (s) {
+                return !TypeLogic.hasTypeParameters(s.type) || TypeLogic.isParameterized(s.type);
+            });
+        }
+
+        return false;
+    };
+
+    TypeLogic.filterSubstitutionsForType = function (substitutions, type) {
+        return substitutions.filter(function (s) {
+            return type.parameters.indexOf(s.parameter) >= 0;
+        });
+    };
+
+    TypeLogic.substitute = function (type, substitutions) {
+        if (substitutions.length === 0) {
+            return type;
+        }
+        assert(type.substitutions.length === 0);
+
+        if (type.innerType instanceof TypeParameter) {
+            for (var i = 0; i < substitutions.length; i++) {
+                var sub = substitutions[i];
+                if (type.innerType === sub.parameter) {
+                    var result = sub.type.wrapWith(TypeModifier.INSTANCE);
+
+                    if (type.isUnowned()) {
+                        result.modifiers &= ~TypeModifier.OWNED;
+                    }
+
+                    if (type.isUnshared()) {
+                        result.modifiers &= ~TypeModifier.SHARED;
+                    }
+
+                    return result;
+                }
+            }
+        }
+
+        if (type.innerType instanceof FunctionType) {
+            var f = type.innerType;
+            return new WrappedType(new FunctionType(TypeLogic.substitute(f.result, substitutions), f.args.map(function (t) {
+                return TypeLogic.substitute(t, substitutions);
+            })), type.modifiers, []);
+        }
+
+        if (type.innerType instanceof ObjectType) {
+            var o = type.innerType;
+            return new WrappedType(o, type.modifiers, TypeLogic.filterSubstitutionsForType(substitutions, o));
+        }
+
+        return type;
     };
     return TypeLogic;
 })();
@@ -1708,7 +1968,7 @@ var Initializer = (function () {
         var type = new ObjectType(node.symbol.name, node.block.scope);
 
         if (node.base !== null) {
-            this.resolver.resolveAsType(node.base);
+            this.resolver.resolveAsParameterizedType(node.base);
 
             // Avoid reporting further errors
             var baseType = node.base.computedType;
@@ -1716,8 +1976,8 @@ var Initializer = (function () {
                 return SpecialType.ERROR.wrap(0);
             }
 
-            if (!baseType.isObject()) {
-                semanticErrorBadBaseType(this.resolver.log, node.range, baseType);
+            if (!baseType.isObject() || baseType.asObject().isSealed) {
+                semanticErrorBadBaseType(this.resolver.log, node.base.range, baseType);
                 return SpecialType.ERROR.wrap(0);
             }
 
@@ -1764,7 +2024,7 @@ var Initializer = (function () {
 
     Initializer.prototype.visitFunctionDeclaration = function (node) {
         var _this = this;
-        this.resolver.resolveAsType(node.result);
+        this.resolver.resolveAsParameterizedType(node.result);
 
         // Determine whether the function is abstract
         node.symbol.isAbstract = node.block === null;
@@ -1792,7 +2052,7 @@ var Initializer = (function () {
         this.resolver.ignoreModifier(node, SymbolModifier.OVER, 'on a variable declaration');
 
         // Resolve the type
-        this.resolver.resolveAsType(node.type);
+        this.resolver.resolveAsParameterizedType(node.type);
         return node.type.computedType.wrapWith(TypeModifier.INSTANCE | TypeModifier.STORAGE);
     };
     return Initializer;
@@ -1818,6 +2078,7 @@ var Resolver = (function () {
         scope.define('bool', SpecialType.BOOL.wrap(0));
         scope.define('double', SpecialType.DOUBLE.wrap(0));
         scope.define('Math', NativeTypes.MATH.wrap(TypeModifier.INSTANCE));
+        scope.define('List', NativeTypes.LIST.wrap(0));
         return scope;
     };
 
@@ -1858,6 +2119,30 @@ var Resolver = (function () {
 
         if (!node.computedType.isError() && node.computedType.isInstance()) {
             semanticErrorUnexpectedExpression(this.log, node.range, node.computedType);
+            node.computedType = SpecialType.ERROR.wrap(0);
+        }
+    };
+
+    Resolver.prototype.resolveAsParameterizedType = function (node) {
+        if (node.computedType !== null) {
+            return;
+        }
+        this.resolveAsType(node);
+
+        if (TypeLogic.hasTypeParameters(node.computedType) && !TypeLogic.isParameterized(node.computedType)) {
+            semanticErrorUnparameterizedExpression(this.log, node.range, node.computedType);
+            node.computedType = SpecialType.ERROR.wrap(0);
+        }
+    };
+
+    Resolver.prototype.resolveAsUnparameterizedType = function (node) {
+        if (node.computedType !== null) {
+            return;
+        }
+        this.resolveAsType(node);
+
+        if (TypeLogic.hasTypeParameters(node.computedType) && TypeLogic.isParameterized(node.computedType)) {
+            semanticErrorParameterizedExpression(this.log, node.range, node.computedType);
             node.computedType = SpecialType.ERROR.wrap(0);
         }
     };
@@ -2321,7 +2606,8 @@ var Resolver = (function () {
             return;
         }
 
-        node.computedType = node.symbol.type;
+        // Substitute the type parameters from the object into the member
+        node.computedType = TypeLogic.substitute(node.symbol.type, node.value.computedType.substitutions);
     };
 
     Resolver.prototype.visitIntExpression = function (node) {
@@ -2337,7 +2623,7 @@ var Resolver = (function () {
     };
 
     Resolver.prototype.visitNullExpression = function (node) {
-        node.computedType = SpecialType.NULL.wrap(TypeModifier.INSTANCE | TypeModifier.OWNED);
+        node.computedType = SpecialType.NULL.wrap(TypeModifier.INSTANCE);
     };
 
     Resolver.prototype.visitThisExpression = function (node) {
@@ -2373,7 +2659,7 @@ var Resolver = (function () {
 
     Resolver.prototype.visitNewExpression = function (node) {
         var _this = this;
-        this.resolveAsType(node.type);
+        this.resolveAsParameterizedType(node.type);
         node.args.forEach(function (n) {
             return _this.resolveAsExpression(n);
         });
@@ -2382,10 +2668,10 @@ var Resolver = (function () {
             return;
         }
 
-        // New only works on object types
+        // New only works on raw object types
         var objectType = node.type.computedType.asObject();
-        if (objectType === null) {
-            semanticErrorInvalidNew(this.log, node.range, node.type.computedType);
+        if (objectType === null || !node.type.computedType.isRawPointer()) {
+            semanticErrorInvalidNew(this.log, node.type.range, node.type.computedType);
             return;
         }
 
@@ -2395,16 +2681,17 @@ var Resolver = (function () {
         }
 
         this.checkCallArguments(node.range, objectType.constructorType(), node.args);
-        node.computedType = objectType.wrap(TypeModifier.INSTANCE | TypeModifier.OWNED);
+        node.computedType = node.type.computedType.wrapWith(TypeModifier.INSTANCE | TypeModifier.OWNED);
     };
 
     Resolver.prototype.visitTypeModifierExpression = function (node) {
-        this.resolveAsType(node.type);
+        this.resolveAsParameterizedType(node.type);
 
         if (node.type.computedType.isError()) {
             return;
         }
 
+        // Cannot use both owned and shared
         var all = node.modifiers & (TypeModifier.OWNED | TypeModifier.SHARED);
         if (all !== TypeModifier.OWNED && all !== TypeModifier.SHARED) {
             semanticErrorPointerModifierConflict(this.log, node.range);
@@ -2418,6 +2705,46 @@ var Resolver = (function () {
 
         node.computedType = node.type.computedType.wrapWith(node.modifiers);
     };
+
+    Resolver.prototype.visitTypeParameterExpression = function (node) {
+        var _this = this;
+        this.resolveAsUnparameterizedType(node.type);
+        node.parameters.forEach(function (n) {
+            return _this.resolveAsParameterizedType(n);
+        });
+
+        if (node.type.computedType.isError() || node.parameters.some(function (p) {
+            return p.computedType.isError();
+        })) {
+            return;
+        }
+
+        if (!TypeLogic.hasTypeParameters(node.type.computedType)) {
+            semanticErrorCannotParameterize(this.log, node.type.range, node.type.computedType);
+            return;
+        }
+
+        // Validate parameter count
+        var type = node.type.computedType.innerType;
+        if (node.parameters.length !== type.parameters.length) {
+            semanticErrorParameterCount(this.log, node.range, type.parameters.length, node.parameters.length);
+            return;
+        }
+
+        for (var i = 0; i < node.parameters.length; i++) {
+            var n = node.parameters[i];
+            if (!n.computedType.isObject()) {
+                semanticErrorBadParameter(this.log, n.range, n.computedType);
+                return;
+            }
+        }
+
+        // Create the substitution environment
+        var substitutions = type.parameters.map(function (p, i) {
+            return new Substitution(p, node.parameters[i].computedType);
+        });
+        node.computedType = TypeLogic.substitute(node.type.computedType, substitutions);
+    };
     return Resolver;
 })();
 var Compiler = (function () {
@@ -2428,7 +2755,7 @@ var Compiler = (function () {
         var source = new Source('<stdin>', input);
 
         // Tokenize
-        this.tokens = tokenize(this.log, source);
+        this.tokens = prepareTokens(tokenize(this.log, source));
         if (this.log.hasErrors)
             return;
 
@@ -2785,7 +3112,7 @@ var OutputJS = (function () {
                     object: { type: 'Identifier', name: 'Math' },
                     property: { type: 'Identifier', name: 'imul' }
                 },
-                'arguments': [
+                arguments: [
                     node.left.acceptExpressionVisitor(this),
                     node.right.acceptExpressionVisitor(this)
                 ]
@@ -2875,6 +3202,130 @@ var OutputJS = (function () {
 
     OutputJS.prototype.visitCallExpression = function (node) {
         var _this = this;
+        if (node.value instanceof MemberExpression) {
+            var member = node.value;
+            if (member.value.computedType.innerType === NativeTypes.LIST) {
+                switch (member.symbol) {
+                    case NativeTypes.LIST_GET:
+                        assert(node.args.length === 1);
+                        return {
+                            type: 'MemberExpression',
+                            object: member.value.acceptExpressionVisitor(this),
+                            property: node.args[0].acceptExpressionVisitor(this),
+                            computed: true
+                        };
+
+                    case NativeTypes.LIST_SET:
+                        assert(node.args.length === 2);
+                        return {
+                            type: 'AssignmentExpression',
+                            operator: '=',
+                            left: {
+                                type: 'MemberExpression',
+                                object: member.value.acceptExpressionVisitor(this),
+                                property: node.args[0].acceptExpressionVisitor(this),
+                                computed: true
+                            },
+                            right: node.args[1].acceptExpressionVisitor(this)
+                        };
+
+                    case NativeTypes.LIST_PUSH:
+                        assert(node.args.length === 1);
+                        return {
+                            type: 'CallExpression',
+                            callee: {
+                                type: 'MemberExpression',
+                                object: member.value.acceptExpressionVisitor(this),
+                                property: { kind: 'Identifier', name: 'push' }
+                            },
+                            arguments: [node.args[0].acceptExpressionVisitor(this)]
+                        };
+
+                    case NativeTypes.LIST_POP:
+                        assert(node.args.length === 0);
+                        return {
+                            type: 'CallExpression',
+                            callee: {
+                                type: 'MemberExpression',
+                                object: member.value.acceptExpressionVisitor(this),
+                                property: { kind: 'Identifier', name: 'pop' }
+                            },
+                            arguments: []
+                        };
+
+                    case NativeTypes.LIST_UNSHIFT:
+                        assert(node.args.length === 1);
+                        return {
+                            type: 'CallExpression',
+                            callee: {
+                                type: 'MemberExpression',
+                                object: member.value.acceptExpressionVisitor(this),
+                                property: { kind: 'Identifier', name: 'unshift' }
+                            },
+                            arguments: [node.args[0].acceptExpressionVisitor(this)]
+                        };
+
+                    case NativeTypes.LIST_SHIFT:
+                        assert(node.args.length === 0);
+                        return {
+                            type: 'CallExpression',
+                            callee: {
+                                type: 'MemberExpression',
+                                object: member.value.acceptExpressionVisitor(this),
+                                property: { kind: 'Identifier', name: 'shift' }
+                            },
+                            arguments: []
+                        };
+
+                    case NativeTypes.LIST_INDEX_OF:
+                        assert(node.args.length === 1);
+                        return {
+                            type: 'CallExpression',
+                            callee: {
+                                type: 'MemberExpression',
+                                object: member.value.acceptExpressionVisitor(this),
+                                property: { kind: 'Identifier', name: 'indexOf' }
+                            },
+                            arguments: [node.args[0].acceptExpressionVisitor(this)]
+                        };
+
+                    case NativeTypes.LIST_INSERT:
+                        assert(node.args.length === 2);
+                        return {
+                            type: 'CallExpression',
+                            callee: {
+                                type: 'MemberExpression',
+                                object: member.value.acceptExpressionVisitor(this),
+                                property: { kind: 'Identifier', name: 'splice' }
+                            },
+                            arguments: [
+                                node.args[0].acceptExpressionVisitor(this),
+                                { type: 'Literal', value: 0 },
+                                node.args[1].acceptExpressionVisitor(this)
+                            ]
+                        };
+
+                    case NativeTypes.LIST_REMOVE:
+                        assert(node.args.length === 1);
+                        return {
+                            type: 'CallExpression',
+                            callee: {
+                                type: 'MemberExpression',
+                                object: member.value.acceptExpressionVisitor(this),
+                                property: { kind: 'Identifier', name: 'splice' }
+                            },
+                            arguments: [
+                                node.args[0].acceptExpressionVisitor(this),
+                                { type: 'Literal', value: 1 }
+                            ]
+                        };
+
+                    default:
+                        assert(false);
+                }
+            }
+        }
+
         return {
             type: 'CallExpression',
             callee: node.value.acceptExpressionVisitor(this),
@@ -2886,6 +3337,14 @@ var OutputJS = (function () {
 
     OutputJS.prototype.visitNewExpression = function (node) {
         var _this = this;
+        if (node.type.computedType.innerType === NativeTypes.LIST) {
+            assert(node.args.length === 0);
+            return {
+                type: 'ArrayExpression',
+                elements: []
+            };
+        }
+
         return {
             type: 'NewExpression',
             callee: node.type.acceptExpressionVisitor(this),
@@ -2898,6 +3357,10 @@ var OutputJS = (function () {
     OutputJS.prototype.visitTypeModifierExpression = function (node) {
         assert(false);
         return null;
+    };
+
+    OutputJS.prototype.visitTypeParameterExpression = function (node) {
+        return node.type.acceptExpressionVisitor(this);
     };
     OutputJS.INTEGER_OPS = {
         '~': true,
@@ -2912,12 +3375,126 @@ var OutputJS = (function () {
 var OutputCPP = (function () {
     function OutputCPP() {
         this.needMemoryHeader = false;
+        this.needVectorHeader = false;
         this.needMathHeader = false;
         this.needMathRandom = false;
+        this.needAlgorithmHeader = false;
+        this.needListPop = false;
+        this.needListUnshift = false;
+        this.needListShift = false;
+        this.needListIndexOf = false;
+        this.needListInsert = false;
+        this.needListRemove = false;
         this.returnType = null;
     }
     OutputCPP.generate = function (node) {
-        return cppcodegen.generate(new OutputCPP().visitModule(node), { indent: '  ', nullptr: true }).trim();
+        var output = new OutputCPP();
+        var result = cppcodegen.generate(output.visitModule(node), { indent: '  ', cpp11: true }).trim();
+
+        // Cheat for now since I don't feel like writing tons of JSON
+        var listStuff = '';
+        if (output.needListPop) {
+            listStuff += [
+                'template <typename T>',
+                'T List_pop(std::vector<T> *list) {',
+                '  T t = std::move(*(list->end() - 1));',
+                '  list->pop_back();',
+                '  return std::move(t);',
+                '}'
+            ].join('\n') + '\n';
+        }
+        if (output.needListUnshift) {
+            listStuff += [
+                'template <typename T>',
+                'void List_unshift(std::vector<T> *list, T t) {',
+                '  list->insert(list->begin(), std::move(t));',
+                '}'
+            ].join('\n') + '\n';
+        }
+        if (output.needListShift) {
+            listStuff += [
+                'template <typename T>',
+                'T List_shift(std::vector<T> *list) {',
+                '  T t = std::move(*list->begin());',
+                '  list->erase(list->begin());',
+                '  return std::move(t);',
+                '}'
+            ].join('\n') + '\n';
+        }
+        if (output.needListIndexOf) {
+            listStuff += [
+                'template <typename T, typename U>',
+                'int List_indexOf(std::vector<std::unique_ptr<T>> *list, U *u) {',
+                '  for (typename std::vector<std::unique_ptr<T>>::iterator i = list->begin(); i != list->end(); i++) {',
+                '    if (i->get() == u) {',
+                '      return i - list->begin();',
+                '    }',
+                '  }',
+                '  return -1;',
+                '}',
+                'template <typename T, typename U>',
+                'int List_indexOf(std::vector<std::shared_ptr<T>> *list, U *u) {',
+                '  for (typename std::vector<std::shared_ptr<T>>::iterator i = list->begin(); i != list->end(); i++) {',
+                '    if (i->get() == u) {',
+                '      return i - list->begin();',
+                '    }',
+                '  }',
+                '  return -1;',
+                '}',
+                'template <typename T, typename U>',
+                'int List_indexOf(std::vector<T *> *list, U *u) {',
+                '  for (typename std::vector<T *>::iterator i = list->begin(); i != list->end(); i++) {',
+                '    if (*i == u) {',
+                '      return i - list->begin();',
+                '    }',
+                '  }',
+                '  return -1;',
+                '}'
+            ].join('\n') + '\n';
+        }
+        if (output.needListInsert) {
+            listStuff += [
+                'template <typename T>',
+                'void List_insert(std::vector<T> *list, int offset, T t) {',
+                '  list->insert(list->begin() + offset, std::move(t));',
+                '}'
+            ].join('\n') + '\n';
+        }
+        if (output.needListRemove) {
+            listStuff += [
+                'template <typename T>',
+                'void List_remove(std::vector<T> *list, int offset) {',
+                '  list->erase(list->begin() + offset);',
+                '}'
+            ].join('\n') + '\n';
+        }
+        return result.replace(/\n(?!#)/, '\n' + listStuff);
+    };
+
+    OutputCPP.prototype.defaultForType = function (type) {
+        switch (type.innerType) {
+            case SpecialType.INT:
+                return {
+                    kind: 'IntegerLiteral',
+                    value: 0
+                };
+
+            case SpecialType.DOUBLE:
+                return {
+                    kind: 'DoubleLiteral',
+                    value: 0
+                };
+
+            case SpecialType.BOOL:
+                return {
+                    kind: 'BooleanLiteral',
+                    value: false
+                };
+        }
+
+        return {
+            kind: 'NullLiteral'
+        };
     };
 
     OutputCPP.prototype.visitType = function (type) {
@@ -2933,10 +3510,26 @@ var OutputCPP = (function () {
         }
 
         assert(type.innerType instanceof ObjectType);
+        var objectType = type.innerType;
         var result = {
             kind: 'Identifier',
-            name: (type.innerType).name
+            name: objectType.name
         };
+
+        if (objectType === NativeTypes.LIST) {
+            this.needVectorHeader = true;
+            assert(type.substitutions.length === 1);
+            assert(type.substitutions[0].parameter === NativeTypes.LIST_T);
+            result = {
+                kind: 'SpecializeTemplate',
+                template: {
+                    kind: 'MemberType',
+                    inner: { kind: 'Identifier', name: 'std' },
+                    member: { kind: 'Identifier', name: 'vector' }
+                },
+                parameters: [this.visitType(type.substitutions[0].type)]
+            };
+        }
 
         if (type.isRawPointer()) {
             return {
@@ -3029,7 +3622,7 @@ var OutputCPP = (function () {
             return ({
                 kind: 'CallExpression',
                 callee: _this.visitIdentifier(n.id),
-                'arguments': [n.value !== null ? _this.insertImplicitConversion(n.value, n.symbol.type) : _this.visitIdentifier(n.id)]
+                arguments: [n.value !== null ? _this.insertImplicitConversion(n.value, n.symbol.type) : _this.visitIdentifier(n.id)]
             });
         });
 
@@ -3037,7 +3630,7 @@ var OutputCPP = (function () {
             initializations.unshift({
                 kind: 'CallExpression',
                 callee: node.base.acceptExpressionVisitor(this),
-                'arguments': baseVariables.map(function (n) {
+                arguments: baseVariables.map(function (n) {
                     return _this.visitIdentifier(n.id);
                 })
             });
@@ -3048,7 +3641,7 @@ var OutputCPP = (function () {
             kind: 'FunctionDeclaration',
             type: {
                 kind: 'FunctionType',
-                'arguments': this.createVariables(baseVariables.concat(variables.filter(function (n) {
+                arguments: this.createVariables(baseVariables.concat(variables.filter(function (n) {
                     return n.value === null;
                 })))
             },
@@ -3064,7 +3657,7 @@ var OutputCPP = (function () {
         // Create the destructor
         dtor({
             kind: 'FunctionDeclaration',
-            type: { kind: 'FunctionType', 'arguments': [] },
+            type: { kind: 'FunctionType', arguments: [] },
             id: {
                 kind: 'MemberType',
                 inner: this.visitIdentifier(node.id),
@@ -3194,7 +3787,18 @@ var OutputCPP = (function () {
             return {
                 kind: 'CallExpression',
                 callee: this.visitType(to),
-                arguments: [from.acceptExpressionVisitor(this)]
+                arguments: [
+                    {
+                        kind: 'CallExpression',
+                        callee: {
+                            kind: 'MemberExpression',
+                            operator: '.',
+                            object: from.acceptExpressionVisitor(this),
+                            member: { kind: 'Identifier', name: 'release' }
+                        },
+                        arguments: []
+                    }
+                ]
             };
         }
 
@@ -3222,7 +3826,7 @@ var OutputCPP = (function () {
             type: {
                 kind: 'FunctionType',
                 'return': this.visitType(node.result.computedType),
-                'arguments': node.args.map(function (n) {
+                arguments: node.args.map(function (n) {
                     return ({
                         kind: 'Variable',
                         type: _this.visitType(n.type.computedType),
@@ -3277,7 +3881,7 @@ var OutputCPP = (function () {
                 type: {
                     kind: 'FunctionType',
                     'return': { kind: 'Identifier', name: 'double' },
-                    'arguments': []
+                    arguments: []
                 },
                 id: { kind: 'Identifier', name: 'Math_random' },
                 body: {
@@ -3319,6 +3923,18 @@ var OutputCPP = (function () {
             result.body.unshift({
                 kind: 'IncludeStatement',
                 text: '<math.h>'
+            });
+        }
+        if (this.needVectorHeader) {
+            result.body.unshift({
+                kind: 'IncludeStatement',
+                text: '<vector>'
+            });
+        }
+        if (this.needAlgorithmHeader) {
+            result.body.unshift({
+                kind: 'IncludeStatement',
+                text: '<algorithm>'
             });
         }
 
@@ -3404,7 +4020,7 @@ var OutputCPP = (function () {
             type: {
                 kind: 'FunctionType',
                 'return': this.visitType(node.result.computedType),
-                'arguments': node.args.map(function (n) {
+                arguments: node.args.map(function (n) {
                     return ({
                         kind: 'Variable',
                         type: _this.visitType(n.type.computedType),
@@ -3426,7 +4042,7 @@ var OutputCPP = (function () {
                     kind: 'Variable',
                     type: this.visitType(node.type.computedType),
                     id: this.visitIdentifier(node.id),
-                    init: node.value !== null ? this.insertImplicitConversion(node.value, node.symbol.type) : null
+                    init: node.value !== null ? this.insertImplicitConversion(node.value, node.symbol.type) : this.defaultForType(node.symbol.type)
                 }
             ]
         };
@@ -3514,6 +4130,23 @@ var OutputCPP = (function () {
                         kind: 'Identifier',
                         name: 'Math_random'
                     };
+
+                default:
+                    assert(false);
+            }
+        } else if (node.value.computedType.innerType === NativeTypes.LIST) {
+            switch (node.symbol) {
+                case NativeTypes.LIST_LENGTH:
+                    return {
+                        kind: 'CallExpression',
+                        callee: {
+                            kind: 'MemberExpression',
+                            operator: '->',
+                            object: node.value.acceptExpressionVisitor(this),
+                            member: { kind: 'Identifier', name: 'size' }
+                        },
+                        arguments: []
+                    };
             }
         }
 
@@ -3561,12 +4194,116 @@ var OutputCPP = (function () {
     OutputCPP.prototype.visitCallExpression = function (node) {
         var _this = this;
         var functionType = node.value.computedType.asFunction();
+        var args = node.args.map(function (n, i) {
+            return _this.insertImplicitConversion(n, functionType.args[i]);
+        });
+
+        if (node.value instanceof MemberExpression) {
+            var member = node.value;
+            if (member.value.computedType.innerType === NativeTypes.LIST) {
+                switch (member.symbol) {
+                    case NativeTypes.LIST_GET:
+                        assert(args.length === 1);
+                        var result = {
+                            kind: 'BinaryExpression',
+                            operator: '[]',
+                            left: {
+                                kind: 'UnaryExpression',
+                                operator: '*',
+                                argument: member.value.acceptExpressionVisitor(this)
+                            },
+                            right: args[0]
+                        };
+                        assert(member.value.computedType.substitutions.length === 1);
+                        if (!member.value.computedType.substitutions[0].type.isRawPointer()) {
+                            return {
+                                kind: 'CallExpression',
+                                callee: {
+                                    kind: 'MemberExpression',
+                                    operator: '.',
+                                    object: result,
+                                    member: { kind: 'Identifier', name: 'get' }
+                                },
+                                arguments: []
+                            };
+                        }
+                        return result;
+
+                    case NativeTypes.LIST_SET:
+                        assert(args.length === 2);
+                        return {
+                            kind: 'AssignmentExpression',
+                            operator: '=',
+                            left: {
+                                kind: 'BinaryExpression',
+                                operator: '[]',
+                                left: {
+                                    kind: 'UnaryExpression',
+                                    operator: '*',
+                                    argument: member.value.acceptExpressionVisitor(this)
+                                },
+                                right: args[0]
+                            },
+                            right: args[1]
+                        };
+
+                    case NativeTypes.LIST_PUSH:
+                        assert(args.length === 1);
+                        return {
+                            kind: 'CallExpression',
+                            callee: {
+                                kind: 'MemberExpression',
+                                operator: '->',
+                                object: member.value.acceptExpressionVisitor(this),
+                                member: { kind: 'Identifier', name: 'push_back' }
+                            },
+                            arguments: args
+                        };
+
+                    case NativeTypes.LIST_POP:
+                    case NativeTypes.LIST_UNSHIFT:
+                    case NativeTypes.LIST_SHIFT:
+                    case NativeTypes.LIST_INDEX_OF:
+                    case NativeTypes.LIST_INSERT:
+                    case NativeTypes.LIST_REMOVE:
+                        switch (member.symbol) {
+                            case NativeTypes.LIST_POP:
+                                this.needListPop = true;
+                                break;
+                            case NativeTypes.LIST_UNSHIFT:
+                                this.needListUnshift = true;
+                                break;
+                            case NativeTypes.LIST_SHIFT:
+                                this.needListShift = true;
+                                break;
+                            case NativeTypes.LIST_INDEX_OF:
+                                this.needListIndexOf = this.needAlgorithmHeader = true;
+                                break;
+                            case NativeTypes.LIST_INSERT:
+                                this.needListInsert = true;
+                                break;
+                            case NativeTypes.LIST_REMOVE:
+                                this.needListRemove = true;
+                                break;
+                            default:
+                                assert(false);
+                        }
+                        return {
+                            kind: 'CallExpression',
+                            callee: { kind: 'Identifier', name: 'List_' + member.symbol.name },
+                            arguments: [this.insertImplicitConversion(member.value, NativeTypes.LIST.wrap(0))].concat(args)
+                        };
+
+                    default:
+                        assert(false);
+                }
+            }
+        }
+
         return {
             kind: 'CallExpression',
             callee: node.value.acceptExpressionVisitor(this),
-            arguments: node.args.map(function (n, i) {
-                return _this.insertImplicitConversion(n, functionType.args[i]);
-            })
+            arguments: args
         };
     };
 
@@ -3583,12 +4320,12 @@ var OutputCPP = (function () {
                     inner: { kind: 'Identifier', name: 'std' },
                     member: { kind: 'Identifier', name: 'unique_ptr' }
                 },
-                parameters: [node.type.acceptExpressionVisitor(this)]
+                parameters: [this.visitType(node.type.computedType).inner]
             },
             arguments: [
                 {
                     kind: 'NewExpression',
-                    callee: node.type.acceptExpressionVisitor(this),
+                    callee: this.visitType(node.type.computedType).inner,
                     arguments: node.args.map(function (n, i) {
                         return _this.insertImplicitConversion(n, functionType.args[i]);
                     })
@@ -3600,6 +4337,10 @@ var OutputCPP = (function () {
     OutputCPP.prototype.visitTypeModifierExpression = function (node) {
         assert(false);
         return null;
+    };
+
+    OutputCPP.prototype.visitTypeParameterExpression = function (node) {
+        return node.type.acceptExpressionVisitor(this);
     };
     return OutputCPP;
 })();
