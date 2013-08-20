@@ -450,7 +450,7 @@ class OutputJS implements StatementVisitor<Object>, DeclarationVisitor<Object>, 
             callee: {
               type: 'MemberExpression',
               object: member.value.acceptExpressionVisitor(this),
-              property: { kind: 'Identifier', name: 'pop' }
+              property: { kind: 'Identifier', name: 'push' }
             },
             arguments: [node.args[0].acceptExpressionVisitor(this)]
           };

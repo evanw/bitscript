@@ -57,4 +57,5 @@ NativeTypes.LIST_INSERT = NativeTypes.LIST.scope.define('insert', NativeTypes.cr
 NativeTypes.LIST_REMOVE = NativeTypes.LIST.scope.define('remove', NativeTypes.createFunction(SpecialType.VOID, [SpecialType.INT]));
 
 // Getting an element from a list of owned pointers should not steal ownership
-NativeTypes.LIST_GET.type.asFunction().result.modifiers |= TypeModifier.UNOWNED;
+NativeTypes.LIST_GET.type.asFunction().result.modifiers |= TypeModifier.UNOWNED | TypeModifier.UNSHARED;
+NativeTypes.LIST_INDEX_OF.type.asFunction().args[0].modifiers |= TypeModifier.UNOWNED | TypeModifier.UNSHARED;

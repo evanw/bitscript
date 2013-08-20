@@ -2,12 +2,79 @@ declare var cppcodegen: any;
 
 class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>, ExpressionVisitor<Object> {
   needMemoryHeader: boolean = false;
+  needVectorHeader: boolean = false;
   needMathHeader: boolean = false;
   needMathRandom: boolean = false;
+  needAlgorithmHeader: boolean = false;
+  needListPop: boolean = false;
+  needListUnshift: boolean = false;
+  needListShift: boolean = false;
+  needListIndexOf: boolean = false;
+  needListInsert: boolean = false;
+  needListRemove: boolean = false;
   returnType: WrappedType = null;
 
   static generate(node: Module): string {
-    return cppcodegen.generate(new OutputCPP().visitModule(node), { indent: '  ', cpp11: true }).trim();
+    var output: OutputCPP = new OutputCPP();
+    var result: string = cppcodegen.generate(output.visitModule(node), { indent: '  ', cpp11: true }).trim();
+
+    // Cheat for now since I don't feel like writing tons of JSON
+    var listStuff: string = '';
+    if (output.needListPop) {
+      listStuff += [
+        'template <typename T>',
+        'T List_pop(std::vector<T> *list) {',
+        '  T t = std::move(*(list->end() - 1));',
+        '  list->pop_back();',
+        '  return std::move(t);',
+        '}',
+      ].join('\n') + '\n';
+    }
+    if (output.needListUnshift) {
+      listStuff += [
+        'template <typename T>',
+        'void List_unshift(std::vector<T> *list, T t) {',
+        '  list->insert(list->begin(), std::move(t));',
+        '}',
+      ].join('\n') + '\n';
+    }
+    if (output.needListShift) {
+      listStuff += [
+        'template <typename T>',
+        'T List_shift(std::vector<T> *list) {',
+        '  T t = std::move(*list->begin());',
+        '  list->erase(list->begin());',
+        '  return std::move(t);',
+        '}',
+      ].join('\n') + '\n';
+    }
+    if (output.needListIndexOf) {
+      listStuff += [
+        'template <typename T>',
+        'int List_indexOf(std::vector<T> *list, T t) {',
+        '  typename std::vector<T>::iterator i = std::find(list->begin(), list->end(), t);',
+        '  return i == list->end() ? -1 : i - list->begin();',
+        '}',
+      ].join('\n') + '\n';
+    }
+    if (output.needListInsert) {
+      listStuff += [
+        'template <typename T>',
+        'void List_insert(std::vector<T> *list, int offset, T t) {',
+        '  list->insert(list->begin() + offset, std::move(t));',
+        '}',
+      ].join('\n') + '\n';
+    }
+    if (output.needListRemove) {
+      listStuff += [
+        'template <typename T>',
+        'void List_remove(std::vector<T> *list, int offset) {',
+        '  list->erase(list->begin() + offset);',
+        '}',
+      ].join('\n') + '\n';
+    }
+
+    return listStuff + result;
   }
 
   defaultForType(type: WrappedType): Object {
@@ -52,6 +119,7 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
     };
 
     if (objectType === NativeTypes.LIST) {
+      this.needVectorHeader = true;
       assert(type.substitutions.length === 1);
       assert(type.substitutions[0].parameter === NativeTypes.LIST_T);
       result = {
@@ -307,7 +375,16 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
       return {
         kind: 'CallExpression',
         callee: this.visitType(to),
-        arguments: [from.acceptExpressionVisitor(this)]
+        arguments: [{
+          kind: 'CallExpression',
+          callee: {
+            kind: 'MemberExpression',
+            operator: '.',
+            object: from.acceptExpressionVisitor(this),
+            member: { kind: 'Identifier', name: 'release' }
+          },
+          arguments: []
+        }]
       };
     }
 
@@ -407,6 +484,18 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
       result.body.unshift({
         kind: 'IncludeStatement',
         text: '<math.h>'
+      });
+    }
+    if (this.needVectorHeader) {
+      result.body.unshift({
+        kind: 'IncludeStatement',
+        text: '<vector>'
+      });
+    }
+    if (this.needAlgorithmHeader) {
+      result.body.unshift({
+        kind: 'IncludeStatement',
+        text: '<algorithm>'
       });
     }
 
@@ -600,6 +689,23 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
       }
     }
 
+    else if (node.value.computedType.innerType === NativeTypes.LIST) {
+      switch (node.symbol) {
+
+      case NativeTypes.LIST_LENGTH:
+        return {
+          kind: 'CallExpression',
+          callee: {
+            kind: 'MemberExpression',
+            operator: '->',
+            object: node.value.acceptExpressionVisitor(this),
+            member: { kind: 'Identifier', name: 'size' }
+          },
+          arguments: []
+        };
+      }
+    }
+
     return {
       kind: 'MemberExpression',
       operator: node.value.computedType.isPointer() ? '->' : '.',
@@ -644,6 +750,83 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
   visitCallExpression(node: CallExpression): Object {
     var functionType: FunctionType = node.value.computedType.asFunction();
     var args: Object[] = node.args.map((n, i) => this.insertImplicitConversion(n, functionType.args[i]));
+
+    if (node.value instanceof MemberExpression) {
+      var member: MemberExpression = <MemberExpression>node.value;
+      if (member.value.computedType.innerType === NativeTypes.LIST) {
+        switch (member.symbol) {
+
+        case NativeTypes.LIST_GET:
+          assert(args.length === 1);
+          return {
+            kind: 'BinaryExpression',
+            operator: '[]',
+            left: {
+              kind: 'UnaryExpression',
+              operator: '*',
+              argument: member.value.acceptExpressionVisitor(this)
+            },
+            right: args[0]
+          };
+
+        case NativeTypes.LIST_SET:
+          assert(args.length === 2);
+          return {
+            kind: 'AssignmentExpression',
+            operator: '=',
+            left: {
+              kind: 'BinaryExpression',
+              operator: '[]',
+              left: {
+                kind: 'UnaryExpression',
+                operator: '*',
+                argument: member.value.acceptExpressionVisitor(this)
+              },
+              right: args[0]
+            },
+            right: args[1]
+          };
+
+        case NativeTypes.LIST_PUSH:
+          assert(args.length === 1);
+          return {
+            kind: 'CallExpression',
+            callee: {
+              kind: 'MemberExpression',
+              operator: '->',
+              object: member.value.acceptExpressionVisitor(this),
+              member: { kind: 'Identifier', name: 'push_back' }
+            },
+            arguments: args
+          };
+
+        case NativeTypes.LIST_POP:
+        case NativeTypes.LIST_UNSHIFT:
+        case NativeTypes.LIST_SHIFT:
+        case NativeTypes.LIST_INDEX_OF:
+        case NativeTypes.LIST_INSERT:
+        case NativeTypes.LIST_REMOVE:
+          switch (member.symbol) {
+          case NativeTypes.LIST_POP: this.needListPop = true; break;
+          case NativeTypes.LIST_UNSHIFT: this.needListUnshift = true; break;
+          case NativeTypes.LIST_SHIFT: this.needListShift = true; break;
+          case NativeTypes.LIST_INDEX_OF: this.needListIndexOf = this.needAlgorithmHeader = true; break;
+          case NativeTypes.LIST_INSERT: this.needListInsert = true; break;
+          case NativeTypes.LIST_REMOVE: this.needListRemove = true; break;
+          default: assert(false);
+          }
+          return {
+            kind: 'CallExpression',
+            callee: { kind: 'Identifier', name: 'List_' + member.symbol.name },
+            arguments: [this.insertImplicitConversion(member.value, NativeTypes.LIST.wrap(0))].concat(args)
+          };
+
+        default:
+          assert(false);
+        }
+      }
+    }
+
     return {
       kind: 'CallExpression',
       callee: node.value.acceptExpressionVisitor(this),

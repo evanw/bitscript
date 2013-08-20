@@ -1,0 +1,97 @@
+class Foo {
+}
+
+void testOwnedList() {
+  owned List<owned Foo> foo = new List<owned Foo>();
+  foo.push(new Foo());
+  foo.push(new Foo());
+  foo.push(new Foo());
+  foo.unshift(new Foo());
+  foo.unshift(new Foo());
+  foo.unshift(new Foo());
+
+  // Test indexOf
+  foo.indexOf(foo.get(0));
+  foo.indexOf(new Foo());
+
+  // Test owned
+  owned Foo f1 = foo.pop();
+  owned Foo f2 = foo.shift();
+
+  // Test shared
+  shared List<owned Foo> bar = foo;
+  owned Foo f3 = bar.pop();
+  owned Foo f4 = bar.shift();
+
+  // Test raw
+  List<owned Foo> baz = bar;
+  owned Foo f5 = baz.pop();
+  owned Foo f6 = baz.shift();
+}
+
+void testSharedList() {
+  owned List<shared Foo> foo = new List<shared Foo>();
+  foo.push(new Foo());
+  foo.push(new Foo());
+  foo.push(new Foo());
+  foo.unshift(new Foo());
+  foo.unshift(new Foo());
+  foo.unshift(new Foo());
+
+  // Test indexOf
+  foo.indexOf(foo.get(0));
+  foo.indexOf(new Foo());
+
+  // Test owned
+  shared Foo f1 = foo.pop();
+  shared Foo f2 = foo.shift();
+
+  // Test shared
+  shared List<shared Foo> bar = foo;
+  shared Foo f3 = bar.pop();
+  shared Foo f4 = bar.shift();
+
+  // Test raw
+  List<shared Foo> baz = bar;
+  shared Foo f5 = baz.pop();
+  shared Foo f6 = baz.shift();
+}
+
+void testRawList(
+    owned Foo i1, owned Foo i2, owned Foo i3,
+    owned Foo i4, owned Foo i5, owned Foo i6) {
+  owned List<Foo> foo = new List<Foo>();
+  foo.push(i1);
+  foo.push(i2);
+  foo.push(i3);
+  foo.unshift(i4);
+  foo.unshift(i5);
+  foo.unshift(i6);
+
+  // Test indexOf
+  foo.indexOf(foo.get(0));
+  foo.indexOf(new Foo());
+
+  // Test owned
+  Foo f1 = foo.pop();
+  Foo f2 = foo.shift();
+
+  // Test shared
+  shared List<Foo> bar = foo;
+  Foo f3 = bar.pop();
+  Foo f4 = bar.shift();
+
+  // Test raw
+  List<Foo> baz = bar;
+  Foo f5 = baz.pop();
+  Foo f6 = baz.shift();
+}
+
+int main() {
+  testOwnedList();
+  testSharedList();
+  testRawList(
+    new Foo(), new Foo(), new Foo(),
+    new Foo(), new Foo(), new Foo());
+  return 0;
+}
