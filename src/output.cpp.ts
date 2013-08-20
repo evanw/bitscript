@@ -146,7 +146,7 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
     var initializations: Object[] = variables.map(n => ({
       kind: 'CallExpression',
       callee: this.visitIdentifier(n.id),
-      'arguments': [n.value !== null ? this.insertImplicitConversion(n.value, n.symbol.type) : this.visitIdentifier(n.id)]
+      arguments: [n.value !== null ? this.insertImplicitConversion(n.value, n.symbol.type) : this.visitIdentifier(n.id)]
     }));
 
     // Call the inherited constructor
@@ -154,7 +154,7 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
       initializations.unshift({
         kind: 'CallExpression',
         callee: node.base.acceptExpressionVisitor(this),
-        'arguments': baseVariables.map(n => this.visitIdentifier(n.id))
+        arguments: baseVariables.map(n => this.visitIdentifier(n.id))
       });
     }
 
@@ -163,7 +163,7 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
       kind: 'FunctionDeclaration',
       type: {
         kind: 'FunctionType',
-        'arguments': this.createVariables(baseVariables.concat(variables.filter(n => n.value === null)))
+        arguments: this.createVariables(baseVariables.concat(variables.filter(n => n.value === null)))
       },
       id: {
         kind: 'MemberType',
@@ -177,7 +177,7 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
     // Create the destructor
     dtor({
       kind: 'FunctionDeclaration',
-      type: { kind: 'FunctionType', 'arguments': [] },
+      type: { kind: 'FunctionType', arguments: [] },
       id: {
         kind: 'MemberType',
         inner: this.visitIdentifier(node.id),
@@ -334,7 +334,7 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
       type: {
         kind: 'FunctionType',
         'return': this.visitType(node.result.computedType),
-        'arguments': node.args.map(n => ({
+        arguments: node.args.map(n => ({
           kind: 'Variable',
           type: this.visitType(n.type.computedType),
           id: this.visitIdentifier(n.id)
@@ -366,7 +366,7 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
         type: {
           kind: 'FunctionType',
           'return': { kind: 'Identifier', name: 'double' },
-          'arguments': []
+          arguments: []
         },
         id: { kind: 'Identifier', name: 'Math_random' },
         body: {
@@ -488,7 +488,7 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
       type: {
         kind: 'FunctionType',
         'return': this.visitType(node.result.computedType),
-        'arguments': node.args.map(n => ({
+        arguments: node.args.map(n => ({
           kind: 'Variable',
           type: this.visitType(n.type.computedType),
           id: this.visitIdentifier(n.id)

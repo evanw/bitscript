@@ -322,7 +322,7 @@ class OutputJS implements StatementVisitor<Object>, DeclarationVisitor<Object>, 
           object: { type: 'Identifier', name: 'Math' },
           property: { type: 'Identifier', name: 'imul' }
         },
-        'arguments': [
+        arguments: [
           node.left.acceptExpressionVisitor(this),
           node.right.acceptExpressionVisitor(this)
         ]
@@ -423,10 +423,15 @@ class OutputJS implements StatementVisitor<Object>, DeclarationVisitor<Object>, 
         case NativeTypes.LIST_GET:
           assert(node.args.length === 1);
           return {
-            type: 'MemberExpression',
-            object: member.value.acceptExpressionVisitor(this),
-            property: node.args[0].acceptExpressionVisitor(this),
-            computed: true
+            type: 'LogicalExpression',
+            operator: '||',
+              left: {
+              type: 'MemberExpression',
+              object: member.value.acceptExpressionVisitor(this),
+              property: node.args[0].acceptExpressionVisitor(this),
+              computed: true
+            },
+            right: { type: 'Literal', value: null }
           };
 
         case NativeTypes.LIST_SET:
@@ -441,6 +446,107 @@ class OutputJS implements StatementVisitor<Object>, DeclarationVisitor<Object>, 
               computed: true
             },
             right: node.args[1].acceptExpressionVisitor(this)
+          };
+
+        case NativeTypes.LIST_PUSH:
+          assert(node.args.length === 1);
+          return {
+            type: 'CallExpression',
+            callee: {
+              type: 'MemberExpression',
+              object: member.value.acceptExpressionVisitor(this),
+              property: { kind: 'Identifier', name: 'pop' }
+            },
+            arguments: [node.args[0].acceptExpressionVisitor(this)]
+          };
+
+        case NativeTypes.LIST_POP:
+          assert(node.args.length === 0);
+          return {
+            type: 'LogicalExpression',
+            operator: '||',
+            left: {
+              type: 'CallExpression',
+              callee: {
+                type: 'MemberExpression',
+                object: member.value.acceptExpressionVisitor(this),
+                property: { kind: 'Identifier', name: 'pop' }
+              },
+              arguments: []
+            },
+            right: { type: 'Literal', value: null }
+          };
+
+        case NativeTypes.LIST_UNSHIFT:
+          assert(node.args.length === 1);
+          return {
+            type: 'CallExpression',
+            callee: {
+              type: 'MemberExpression',
+              object: member.value.acceptExpressionVisitor(this),
+              property: { kind: 'Identifier', name: 'unshift' }
+            },
+            arguments: [node.args[0].acceptExpressionVisitor(this)]
+          };
+
+        case NativeTypes.LIST_SHIFT:
+          assert(node.args.length === 0);
+          return {
+            type: 'LogicalExpression',
+            operator: '||',
+            left: {
+              type: 'CallExpression',
+              callee: {
+                type: 'MemberExpression',
+                object: member.value.acceptExpressionVisitor(this),
+                property: { kind: 'Identifier', name: 'shift' }
+              },
+              arguments: []
+            },
+            right: { type: 'Literal', value: null }
+          };
+
+        case NativeTypes.LIST_INDEX_OF:
+          assert(node.args.length === 1);
+          return {
+            type: 'CallExpression',
+            callee: {
+              type: 'MemberExpression',
+              object: member.value.acceptExpressionVisitor(this),
+              property: { kind: 'Identifier', name: 'indexOf' }
+            },
+            arguments: [node.args[0].acceptExpressionVisitor(this)]
+          };
+
+        case NativeTypes.LIST_INSERT:
+          assert(node.args.length === 2);
+          return {
+            type: 'CallExpression',
+            callee: {
+              type: 'MemberExpression',
+              object: member.value.acceptExpressionVisitor(this),
+              property: { kind: 'Identifier', name: 'splice' }
+            },
+            arguments: [
+              node.args[0].acceptExpressionVisitor(this),
+              { type: 'Literal', value: 0 },
+              node.args[1].acceptExpressionVisitor(this)
+            ]
+          };
+
+        case NativeTypes.LIST_REMOVE:
+          assert(node.args.length === 1);
+          return {
+            type: 'CallExpression',
+            callee: {
+              type: 'MemberExpression',
+              object: member.value.acceptExpressionVisitor(this),
+              property: { kind: 'Identifier', name: 'splice' }
+            },
+            arguments: [
+              node.args[0].acceptExpressionVisitor(this),
+              { type: 'Literal', value: 1 }
+            ]
           };
         }
       }
