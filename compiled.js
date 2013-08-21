@@ -506,13 +506,13 @@ var ObjectType = (function (_super) {
         _super.call(this);
         this.name = name;
         this.scope = scope;
-        this.constructorTypeInitializer = null;
-        this.cachedConstructorType = null;
+        this.lazyInitializer = null;
+        this._constructorType = null;
         this.baseType = null;
         // Does some other object type have this as a base?
         this.hasDerivedTypes = false;
         // Does this object type have a (possibly inherited) function without a body?
-        this.isAbstract = false;
+        this._isAbstract = false;
         // Is this object type allowed to be the base class of another object type?
         this.isSealed = false;
     }
@@ -523,11 +523,21 @@ var ObjectType = (function (_super) {
     //   class B : A {}
     //   class C { B b; }
     //
-    ObjectType.prototype.constructorType = function () {
-        if (this.cachedConstructorType === null) {
-            this.cachedConstructorType = this.constructorTypeInitializer();
+    ObjectType.prototype.ensureIsInitialized = function () {
+        if (this.lazyInitializer !== null) {
+            this.lazyInitializer();
+            this.lazyInitializer = null;
         }
-        return this.cachedConstructorType;
+    };
+
+    ObjectType.prototype.isAbstract = function () {
+        this.ensureIsInitialized();
+        return this._isAbstract;
+    };
+
+    ObjectType.prototype.constructorType = function () {
+        this.ensureIsInitialized();
+        return this._constructorType;
     };
 
     ObjectType.prototype.asString = function () {
@@ -767,7 +777,7 @@ NativeTypes.MATH.scope.define('random', NativeTypes.createFunction(SpecialType.D
 
 // Lists are special-cased for now
 NativeTypes.LIST.isSealed = true;
-NativeTypes.LIST.cachedConstructorType = new FunctionType(null, []);
+NativeTypes.LIST._constructorType = new FunctionType(null, []);
 NativeTypes.LIST.parameters.push(NativeTypes.LIST_T);
 NativeTypes.LIST_LENGTH = NativeTypes.LIST.scope.define('length', SpecialType.INT.wrap(TypeModifier.INSTANCE));
 NativeTypes.LIST_GET = NativeTypes.LIST.scope.define('get', NativeTypes.createFunction(NativeTypes.LIST_T, [SpecialType.INT]));
@@ -803,13 +813,20 @@ var Module = (function (_super) {
     }
     // Sort objects so base objects come before derived objects
     Module.prototype.sortedObjectDeclarations = function () {
-        return this.block.statements.filter(function (n) {
+        var list = this.block.statements.filter(function (n) {
             return n instanceof ObjectDeclaration;
-        }).sort(function (a, b) {
-            var A = a.symbol.type.asObject();
-            var B = b.symbol.type.asObject();
-            return +TypeLogic.isBaseTypeOf(A, B) - +TypeLogic.isBaseTypeOf(B, A);
         });
+        for (var i = 0; i < list.length; i++) {
+            var I = list[i].symbol.type.asObject();
+            for (var j = 0; j < i; j++) {
+                var J = list[j].symbol.type.asObject();
+                if (TypeLogic.isBaseTypeOf(J, I)) {
+                    list.splice(j, 0, list.splice(i, 1)[0]);
+                    i = j - 1;
+                }
+            }
+        }
+        return list;
     };
     return Module;
 })(AST);
@@ -1998,27 +2015,23 @@ var Initializer = (function () {
         this.resolver.initializeBlock(node.block);
         this.resolver.popContext();
 
-        // Initialize all member variables now so we can inspect their types
-        node.symbol.type = type.wrap(0);
+        // Link all member variable symbols with this type
         node.block.statements.forEach(function (n) {
             if (n instanceof Declaration) {
                 (n).symbol.enclosingObject = type;
-                _this.resolver.ensureDeclarationIsInitialized(n);
             }
         });
 
-        // Determine whether the class is abstract
-        type.isAbstract = node.block.scope.containsAbstractSymbols();
-
-        // Lazily compute the constructor type, see ObjectType for details
-        type.constructorTypeInitializer = function () {
+        // Lazily compute the constructor type and abstract flag, see ObjectType for details
+        type.lazyInitializer = function () {
             var baseArgTypes = type.baseType !== null ? type.baseType.constructorType().args : [];
             var argTypes = node.block.statements.filter(function (n) {
                 return n instanceof VariableDeclaration && (n).value === null;
             }).map(function (n) {
-                return (n).symbol.type;
+                return (_this.resolver.ensureDeclarationIsInitialized(n), (n).symbol.type);
             });
-            return new FunctionType(null, baseArgTypes.concat(argTypes));
+            type._isAbstract = node.block.scope.containsAbstractSymbols();
+            type._constructorType = new FunctionType(null, baseArgTypes.concat(argTypes));
         };
 
         return type.wrap(0);
@@ -2677,7 +2690,7 @@ var Resolver = (function () {
             return;
         }
 
-        if (objectType.isAbstract) {
+        if (objectType.isAbstract()) {
             semanticErrorAbstractNew(this.log, node.type);
             return;
         }
@@ -3624,7 +3637,17 @@ var OutputCPP = (function () {
             return ({
                 kind: 'CallExpression',
                 callee: _this.visitIdentifier(n.id),
-                arguments: [n.value !== null ? _this.insertImplicitConversion(n.value, n.symbol.type) : _this.visitIdentifier(n.id)]
+                arguments: [
+                    n.value !== null ? _this.insertImplicitConversion(n.value, n.symbol.type) : n.symbol.type.isOwned() ? {
+                        kind: 'CallExpression',
+                        callee: {
+                            kind: 'MemberType',
+                            inner: { kind: 'Identifier', name: 'std' },
+                            member: { kind: 'Identifier', name: 'move' }
+                        },
+                        arguments: [_this.visitIdentifier(n.id)]
+                    } : _this.visitIdentifier(n.id)
+                ]
             });
         });
 
@@ -4142,12 +4165,22 @@ var OutputCPP = (function () {
                     return {
                         kind: 'CallExpression',
                         callee: {
-                            kind: 'MemberExpression',
-                            operator: '->',
-                            object: node.value.acceptExpressionVisitor(this),
-                            member: { kind: 'Identifier', name: 'size' }
+                            kind: 'SpecializeTemplate',
+                            template: { kind: 'Identifier', name: 'static_cast' },
+                            parameters: [{ kind: 'Identifier', name: 'int' }]
                         },
-                        arguments: []
+                        arguments: [
+                            {
+                                kind: 'CallExpression',
+                                callee: {
+                                    kind: 'MemberExpression',
+                                    operator: '->',
+                                    object: node.value.acceptExpressionVisitor(this),
+                                    member: { kind: 'Identifier', name: 'size' }
+                                },
+                                arguments: []
+                            }
+                        ]
                     };
             }
         }
