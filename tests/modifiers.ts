@@ -118,3 +118,27 @@ test([
   '}',
 ], [
 ]);
+
+test([
+  'class Foo {}',
+  'void foo() {',
+  '  owned Foo foo = null;',
+  '}',
+], [
+]);
+
+test([
+  'class Foo {}',
+  'void foo() {',
+  '  shared Foo foo = null;',
+  '}',
+], [
+]);
+
+test([
+  'class Foo {}',
+  'void foo() {',
+  '  Foo foo = null;',
+  '}',
+], [
+]);
