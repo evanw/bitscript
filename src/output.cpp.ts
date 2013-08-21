@@ -1,4 +1,6 @@
-declare var cppcodegen: any;
+if (typeof cppcodegen === 'undefined') {
+  var cppcodegen = require('cppcodegen');
+}
 
 class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>, ExpressionVisitor<Object> {
   needMemoryHeader: boolean = false;

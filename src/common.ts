@@ -1,3 +1,9 @@
+declare var usr: any;
+declare var require: any;
+declare var process: any;
+
+var usr_bin_env_node; // This will turn into '#!/usr/bin/env node' but must be here to reserve the line in the source map
+
 function assert(truth: boolean) {
   if (!truth) {
     throw new Error('assertion failed');
@@ -59,11 +65,11 @@ class Diagnostic {
 
 class Log {
   diagnostics: Diagnostic[] = [];
-  hasErrors: boolean = false;
+  errorCount: number = 0;
 
   error(range: SourceRange, text: string) {
     this.diagnostics.push(new Diagnostic('error', range, text));
-    this.hasErrors = true;
+    this.errorCount++;
   }
 
   warning(range: SourceRange, text: string) {

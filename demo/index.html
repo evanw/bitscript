@@ -87,7 +87,7 @@ body {
     <script src="../node_modules/esprima/esprima.js"></script>
     <script src="escodegen.browser.js"></script>
     <script src="codemirror.js"></script>
-    <script src="../compiled.js"></script>
+    <script src="../bitc.js"></script>
     <script>
 
 var example = [
@@ -283,7 +283,9 @@ function showTextInFirstVisiblePannel(panels, text) {
 
 function recompile() {
   try {
-    var compiler = new Compiler(panelNamed('BitScript').editor.getValue());
+    var compiler = new Compiler();
+    compiler.addSource('<stdin>', panelNamed('BitScript').editor.getValue());
+    compiler.compile();
     panelNamed('Tokens').setTextIfVisible(function() { return compiler.tokens.map(printToken).join('\n'); });
 
     // If there were error messages, stick error messages in the first pannel

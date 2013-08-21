@@ -1,5 +1,10 @@
-declare var esprima: any;
-declare var escodegen: any;
+if (typeof esprima === 'undefined') {
+  var esprima = require('esprima');
+}
+
+if (typeof escodegen === 'undefined') {
+  var escodegen = require('escodegen');
+}
 
 class OutputJS implements StatementVisitor<Object>, DeclarationVisitor<Object>, ExpressionVisitor<Object> {
   needExtendsPolyfill: boolean = false;

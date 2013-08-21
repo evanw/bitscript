@@ -2,9 +2,11 @@
   "name": "bitscript",
   "version": "0.1.0",
   "devDependencies": {
+    "terminal-notifier": "0.1.2",
     "source-map-support": "*",
     "cppcodegen": "0.1.0",
     "typescript": "0.9.1",
+    "escodegen": "0.0.26",
     "esprima": "1.0.3",
     "mocha": "1.12.0"
   }

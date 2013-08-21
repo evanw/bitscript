@@ -1,21 +1,25 @@
 class Compiler {
   log: Log = new Log();
-  tokens: Token[] = null;
+  sources: Source[] = [];
+  tokens: Token[] = [];
   module: Module = null;
 
-  constructor(input: string) {
-    var source: Source = new Source('<stdin>', input);
+  addSource(fileName: string, input: string) {
+    this.sources.push(new Source(fileName, input));
+  }
 
-    // Tokenize
-    this.tokens = prepareTokens(tokenize(this.log, source));
-    if (this.log.hasErrors) return;
+  compile() {
+    // Tokenize and parse each module individually
+    var modules: Module[] = this.sources.map(source => {
+      var errorCount: number = this.log.errorCount;
+      var tokens: Token[] = prepareTokens(tokenize(this.log, source));
+      this.tokens = this.tokens.concat(tokens);
+      return this.log.errorCount === errorCount ? parse(this.log, tokens) : null;
+    });
+    if (this.log.errorCount > 0) return;
 
-    // Parse
-    this.module = parse(this.log, this.tokens);
-    if (this.log.hasErrors) return;
-
-    // Resolve
+    // Create one module and resolve everything together
+    this.module = new Module(null, new Block(null, flatten(modules.map(n => n.block.statements))));
     Resolver.resolve(this.log, this.module);
-    if (this.log.hasErrors) return;
   }
 }
