@@ -2,7 +2,7 @@
 <html>
   <head>
     <meta charset="utf-8">
-    <title>Compiler Debugger</title>
+    <title>BitScript Demo</title>
     <style>
 
 body {
@@ -96,9 +96,7 @@ var example = [
   '  double y = 0;',
   '  double vx = 0;',
   '  double vy = 0;',
-  '',
-  '  // Shared means a reference-counted pointer',
-  '  shared World world;',
+  '  World world;',
   '',
   '  void update(double seconds);',
   '}',
@@ -125,10 +123,17 @@ var example = [
   '',
   'class World {',
   '  double gravity = -10;',
+  '  Player player = null;',
   '',
   '  // Owned pointers delete the object if they still own',
   '  // it after the pointer leaves its enclosing scope',
-  '  owned Player player = null;',
+  '  owned List<owned Entity> entities = new List<owned Entity>();',
+  '',
+  '  void setup() {',
+  '    owned Player p = new Player(this);',
+  '    player = p;',
+  '    entities.push(p);',
+  '  }',
   '',
   '  bool isOnGround(Entity entity) {',
   '    return entity.y <= 0;',
@@ -136,14 +141,15 @@ var example = [
   '}',
   '',
   'int main() {',
-  '  // Create a game world',
+  '  // Shared means a reference-counted pointer',
   '  shared World world = new World();',
-  '  world.player = new Player(world);',
+  '  world.setup();',
   '',
   '  // Swap in a new player (the old player will be deleted)',
   '  owned Player player = new Player(world);',
   '  player.y = 10;',
-  '  world.player = player;',
+  '  int index = world.entities.indexOf(world.player);',
+  '  world.entities.set(index, player);',
   '',
   '  // All allocated objects will automatically be deleted',
   '  return 0;',
@@ -180,7 +186,7 @@ function Panel(options) {
   var that = this;
 
   this.name = options.name;
-  this.isVisible = options.isVisible;
+  this.isVisible = localStorageGet(this.name);
 
   // Custom mode to enable indenting/dedenting with { and }
   this.editor = CodeMirror(document.body, {
@@ -200,13 +206,14 @@ function Panel(options) {
 
   var title = document.createElement('div');
   title.className = 'title';
-  title.textContent = options.name;
+  title.textContent = this.name;
   this.editor.getScrollerElement().appendChild(title);
 
   this.button = document.createElement('div');
-  this.button.textContent = options.name;
+  this.button.textContent = this.name;
   this.button.onmousedown = function() {
     that.isVisible = !that.isVisible;
+    localStorageSet(that.name, that.isVisible);
     distribute();
     recompile();
   };
@@ -269,20 +276,35 @@ function filter(key, value) {
   }
 }
 
+function showTextInFirstVisiblePannel(panels, text) {
+  panels.filter(function(p) { return p.name !== 'BitScript' && p.isVisible; })
+    .forEach(function(p, i) { p.editor.setValue(i === 0 ? text : ''); });
+}
+
 function recompile() {
   try {
     var compiler = new Compiler(panelNamed('BitScript').editor.getValue());
-    if (compiler.log.hasErrors) {
-      throw compiler.log.diagnostics.join('\n');
-    }
-    panelNamed('JavaScript').setTextIfVisible(function() { return OutputJS.generate(compiler.module) + '\n'; });
-    panelNamed('C++11').setTextIfVisible(function() { return OutputCPP.generate(compiler.module) + '\n'; });
-    panelNamed('AST').setTextIfVisible(function() { return JSON.stringify(compiler.module, filter, 2); });
     panelNamed('Tokens').setTextIfVisible(function() { return compiler.tokens.map(printToken).join('\n'); });
+
+    // If there were error messages, stick error messages in the first pannel
+    // that would otherwise be blank and blank out the rest of the pannels
+    var blankPannels = [];
+    if (!compiler.log.hasErrors) {
+      panelNamed('JavaScript').setTextIfVisible(function() { return OutputJS.generate(compiler.module) + '\n'; });
+      panelNamed('C++11').setTextIfVisible(function() { return OutputCPP.generate(compiler.module) + '\n'; });
+    } else {
+      blankPannels.push(panelNamed('JavaScript'), panelNamed('C++11'));
+    }
+    if (compiler.module !== null) {
+      panelNamed('AST').setTextIfVisible(function() { return JSON.stringify(compiler.module, filter, 2); });
+    } else {
+      blankPannels.push(panelNamed('AST'));
+    }
+    if (compiler.log.hasErrors) {
+      showTextInFirstVisiblePannel(blankPannels, compiler.log.diagnostics.join('\n'));
+    }
   } catch (e) {
-    panels
-      .filter(function(p) { return p.name !== 'BitScript'; })
-      .map(function(p, i) { p.editor.setValue(i === 0 ? (e.stack || e) + '' : ''); });
+    showTextInFirstVisiblePannel(panels, (e.stack || e) + '');
   }
 }
 
@@ -294,14 +316,30 @@ function changed() {
   }
 }
 
+function localStorageGet(key) {
+  return (window.localStorage || {})[key] === 'true';
+}
+
+function localStorageSet(key, value) {
+  (window.localStorage || {})[key] = value ? 'true' : '';
+}
+
+// Set visibility defaults
+if (!localStorageGet('initialized')) {
+  localStorageSet('BitScript', true);
+  localStorageSet('JavaScript', true);
+  localStorageSet('C++11', true);
+  localStorageSet('initialized', true);
+}
+
 var oldValue = null;
 var compiler = null;
 var panels = [
-  new Panel({ name: 'BitScript', isVisible: true, readOnly: false }),
-  new Panel({ name: 'JavaScript', isVisible: true, readOnly: true }),
-  new Panel({ name: 'C++11', isVisible: true, readOnly: true }),
-  new Panel({ name: 'AST', isVisible: false, readOnly: true }),
-  new Panel({ name: 'Tokens', isVisible: false, readOnly: true })
+  new Panel({ name: 'BitScript', readOnly: false }),
+  new Panel({ name: 'JavaScript', readOnly: true }),
+  new Panel({ name: 'C++11', readOnly: true }),
+  new Panel({ name: 'AST', readOnly: true }),
+  new Panel({ name: 'Tokens', readOnly: true })
 ];
 
 panelNamed('BitScript').editor.on('change', changed);

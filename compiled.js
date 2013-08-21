@@ -1798,6 +1798,8 @@ var TypeLogic = (function () {
                 });
             }))
                 return false;
+        } else if (to.isPointer()) {
+            return true;
         }
         if (from.isRawPointer() && to.isRawPointer())
             return true;
