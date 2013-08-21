@@ -21,13 +21,18 @@ class Module extends AST {
 
   // Sort objects so base objects come before derived objects
   sortedObjectDeclarations(): ObjectDeclaration[] {
-    return <ObjectDeclaration[]>this.block.statements
-      .filter(n => n instanceof ObjectDeclaration)
-      .sort((a, b) => {
-        var A = a.symbol.type.asObject();
-        var B = b.symbol.type.asObject();
-        return +TypeLogic.isBaseTypeOf(A, B) - +TypeLogic.isBaseTypeOf(B, A);
-      });
+    var list = <ObjectDeclaration[]>this.block.statements.filter(n => n instanceof ObjectDeclaration);
+    for (var i = 0; i < list.length; i++) {
+      var I = list[i].symbol.type.asObject();
+      for (var j = 0; j < i; j++) {
+        var J = list[j].symbol.type.asObject();
+        if (TypeLogic.isBaseTypeOf(J, I)) {
+          list.splice(j, 0, list.splice(i, 1)[0]);
+          i = j - 1;
+        }
+      }
+    }
+    return list;
   }
 }
 

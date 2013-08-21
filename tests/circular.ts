@@ -52,3 +52,15 @@ test([
   '    new A(); // This should be detected as abstract',
   '        ^',
 ]);
+
+test([
+  'class A {',
+  '  void foo() {',
+  '    new B(0); // This should not crash',
+  '  }',
+  '}',
+  'class B {',
+  '  int x;',
+  '}',
+], [
+]);

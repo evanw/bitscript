@@ -107,7 +107,7 @@ class Initializer implements DeclarationVisitor<WrappedType> {
       var baseArgTypes: WrappedType[] = type.baseType !== null ? type.baseType.constructorType().args : [];
       var argTypes: WrappedType[] = node.block.statements
         .filter(n => n instanceof VariableDeclaration && (<VariableDeclaration>n).value === null)
-        .map(n => (<VariableDeclaration>n).symbol.type);
+        .map(n => (this.resolver.ensureDeclarationIsInitialized(n), (<VariableDeclaration>n).symbol.type));
       type._isAbstract = node.block.scope.containsAbstractSymbols();
       type._constructorType = new FunctionType(null, baseArgTypes.concat(argTypes));
     };
