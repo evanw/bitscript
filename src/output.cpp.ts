@@ -235,7 +235,18 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
     var initializations: Object[] = variables.map(n => ({
       kind: 'CallExpression',
       callee: this.visitIdentifier(n.id),
-      arguments: [n.value !== null ? this.insertImplicitConversion(n.value, n.symbol.type) : this.visitIdentifier(n.id)]
+      arguments: [
+        n.value !== null ? this.insertImplicitConversion(n.value, n.symbol.type) :
+        n.symbol.type.isOwned() ? {
+          kind: 'CallExpression',
+          callee: {
+            kind: 'MemberType',
+            inner: { kind: 'Identifier', name: 'std' },
+            member: { kind: 'Identifier', name: 'move' }
+          },
+          arguments: [this.visitIdentifier(n.id)]
+        } :
+        this.visitIdentifier(n.id)]
     }));
 
     // Call the inherited constructor
@@ -717,12 +728,20 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
         return {
           kind: 'CallExpression',
           callee: {
-            kind: 'MemberExpression',
-            operator: '->',
-            object: node.value.acceptExpressionVisitor(this),
-            member: { kind: 'Identifier', name: 'size' }
+            kind: 'SpecializeTemplate',
+            template: { kind: 'Identifier', name: 'static_cast' },
+            parameters: [{ kind: 'Identifier', name: 'int' }]
           },
-          arguments: []
+          arguments: [{
+            kind: 'CallExpression',
+            callee: {
+              kind: 'MemberExpression',
+              operator: '->',
+              object: node.value.acceptExpressionVisitor(this),
+              member: { kind: 'Identifier', name: 'size' }
+            },
+            arguments: []
+          }]
         };
       }
     }
