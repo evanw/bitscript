@@ -193,10 +193,3 @@ test([
   '}',
 ], [
 ]);
-
-test([
-  'class A { C c; }',
-  'class B : A {}',
-  'class C { B b; }',
-], [
-]);

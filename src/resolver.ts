@@ -95,25 +95,21 @@ class Initializer implements DeclarationVisitor<WrappedType> {
     this.resolver.initializeBlock(node.block);
     this.resolver.popContext();
 
-    // Initialize all member variables now so we can inspect their types
-    node.symbol.type = type.wrap(0);
+    // Link all member variable symbols with this type
     node.block.statements.forEach(n => {
       if (n instanceof Declaration) {
         (<Declaration>n).symbol.enclosingObject = type;
-        this.resolver.ensureDeclarationIsInitialized(<Declaration>n);
       }
     });
 
-    // Determine whether the class is abstract
-    type.isAbstract = node.block.scope.containsAbstractSymbols();
-
-    // Lazily compute the constructor type, see ObjectType for details
-    type.constructorTypeInitializer = () => {
+    // Lazily compute the constructor type and abstract flag, see ObjectType for details
+    type.lazyInitializer = () => {
       var baseArgTypes: WrappedType[] = type.baseType !== null ? type.baseType.constructorType().args : [];
       var argTypes: WrappedType[] = node.block.statements
         .filter(n => n instanceof VariableDeclaration && (<VariableDeclaration>n).value === null)
         .map(n => (<VariableDeclaration>n).symbol.type);
-      return new FunctionType(null, baseArgTypes.concat(argTypes));
+      type._isAbstract = node.block.scope.containsAbstractSymbols();
+      type._constructorType = new FunctionType(null, baseArgTypes.concat(argTypes));
     };
 
     return type.wrap(0);
@@ -788,7 +784,7 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
     }
 
     // Cannot construct an abstract class
-    if (objectType.isAbstract) {
+    if (objectType.isAbstract()) {
       semanticErrorAbstractNew(this.log, node.type);
       return;
     }

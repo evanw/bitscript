@@ -43,7 +43,7 @@ NativeTypes.MATH.scope.define('random', NativeTypes.createFunction(SpecialType.D
 
 // Lists are special-cased for now
 NativeTypes.LIST.isSealed = true;
-NativeTypes.LIST.cachedConstructorType = new FunctionType(null, []);
+NativeTypes.LIST._constructorType = new FunctionType(null, []);
 NativeTypes.LIST.parameters.push(NativeTypes.LIST_T);
 NativeTypes.LIST_LENGTH = NativeTypes.LIST.scope.define('length', SpecialType.INT.wrap(TypeModifier.INSTANCE));
 NativeTypes.LIST_GET = NativeTypes.LIST.scope.define('get', NativeTypes.createFunction(NativeTypes.LIST_T, [SpecialType.INT]));

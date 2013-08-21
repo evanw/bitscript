@@ -52,15 +52,15 @@ class FunctionType extends Type {
 }
 
 class ObjectType extends Type {
-  constructorTypeInitializer: () => FunctionType = null;
-  cachedConstructorType: FunctionType = null;
+  lazyInitializer: () => void = null;
+  _constructorType: FunctionType = null;
   baseType: ObjectType = null;
 
   // Does some other object type have this as a base?
   hasDerivedTypes: boolean = false;
 
   // Does this object type have a (possibly inherited) function without a body?
-  isAbstract: boolean = false;
+  _isAbstract: boolean = false;
 
   // Is this object type allowed to be the base class of another object type?
   isSealed: boolean = false;
@@ -78,11 +78,21 @@ class ObjectType extends Type {
   //   class B : A {}
   //   class C { B b; }
   //
-  constructorType(): FunctionType {
-    if (this.cachedConstructorType === null) {
-      this.cachedConstructorType = this.constructorTypeInitializer();
+  ensureIsInitialized() {
+    if (this.lazyInitializer !== null) {
+      this.lazyInitializer();
+      this.lazyInitializer = null;
     }
-    return this.cachedConstructorType;
+  }
+
+  isAbstract(): boolean {
+    this.ensureIsInitialized();
+    return this._isAbstract;
+  }
+
+  constructorType(): FunctionType {
+    this.ensureIsInitialized();
+    return this._constructorType;
   }
 
   asString(): string {

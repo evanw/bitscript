@@ -23,7 +23,8 @@ TESTS= \
 	tests/common.ts \
 	tests/statements.ts \
 	tests/operators.ts \
-	tests/modifiers.ts
+	tests/modifiers.ts \
+	tests/circular.ts
 
 build:
 	$(TSC) $(SOURCES) --sourcemap --out compiled.js
