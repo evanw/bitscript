@@ -42,6 +42,17 @@ class SourceRange {
     public start: Marker,
     public end: Marker) {
   }
+
+  locationString(): string {
+    return 'on line ' + this.start.line + ' of ' + this.source.name;
+  }
+
+  sourceString(): string {
+    var line: string = this.source.lines[this.start.line - 1];
+    var a: number = this.start.column - 1;
+    var b: number = this.end.line === this.start.line ? this.end.column - 1 : line.length;
+    return line + '\n' + repeat(' ', a) + (b - a < 2 ? '^' : repeat('~', b - a));
+  }
 }
 
 class Diagnostic {
@@ -52,14 +63,7 @@ class Diagnostic {
   }
 
   toString(): string {
-    var source: Source = this.range.source;
-    var start: Marker = this.range.start;
-    var end: Marker = this.range.end;
-    var line: string = source.lines[start.line - 1];
-    var a: number = start.column - 1;
-    var b: number = end.line === start.line ? end.column - 1 : line.length;
-    return this.type + ' on line ' + start.line + ' of ' + source.name + ': ' + this.text +
-      '\n\n' + line + '\n' + repeat(' ', a) + (b - a < 2 ? '^' : repeat('~', b - a)) + '\n';
+    return this.type + ' ' + this.range.locationString() + '\n\n' + this.range.sourceString();
   }
 }
 

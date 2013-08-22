@@ -28,12 +28,12 @@ TESTS= \
 	tests/circular.ts
 
 build:
-	$(TSC) $(SOURCES) --sourcemap --out bitc.js
-	python -c 'data = open("bitc.js").read(); open("bitc.js", "w").write(data.replace("var usr_bin_env_node;", "#!/usr/bin/env node"))'
-	chmod +x bitc.js
+	$(TSC) $(SOURCES) --sourcemap --out compiled.js
+	python -c 'open("bitc", "w").write(open("compiled.js").read().replace("var usr_bin_env_node;", "#!/usr/bin/env node"))'
+	chmod +x bitc
 
 watch:
-	$(TSC) $(SOURCES) --sourcemap --out bitc.js -w
+	$(TSC) $(SOURCES) --sourcemap --out compiled.js -w
 
 test:
 	$(TSC) $(SOURCES) $(TESTS) --sourcemap --out test.js

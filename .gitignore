@@ -1,5 +1,6 @@
 /node_modules/
-/bitc.js
-/bitc.js.map
+/compiled.js
+/compiled.js.map
 /test.js
 /test.js.map
+/bitc
