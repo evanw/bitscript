@@ -149,12 +149,29 @@ class Initializer implements DeclarationVisitor<WrappedType> {
   }
 }
 
+enum IsOwnedPointerRelease {
+  NO,
+  YES
+}
+
+interface SymbolReleaseEntry {
+  symbol: Symbol;
+  isReleased: boolean;
+  node: SymbolExpression;
+}
+
 class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, ExpressionVisitor<void> {
   stack: ResolverContext[] = [];
   context: ResolverContext = new ResolverContext(Resolver.createGlobalScope(), false, null, null);
   isInitialized: { [uniqueID: number]: boolean } = {};
   definitionContext: { [uniqueID: number]: ResolverContext } = {};
   initializer: Initializer = new Initializer(this);
+
+  // Releasing and using a symbol in the same expression is an error due to the
+  // unspecified order of operations in C++ and because it's likely a bug. This
+  // tracks all symbol expressions that have been released (std::move() in C++)
+  // and is cleared at the start of each statement.
+  symbolReleaseMap: SymbolReleaseEntry[] = [];
 
   constructor(
     public log: Log) {
@@ -276,11 +293,51 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
     }
   }
 
+  checkSymbolExpression(node: SymbolExpression, isOwnedPointerRelease: IsOwnedPointerRelease) {
+    // Only check symbols of owned type
+    if (node.symbol === null || !node.symbol.type.isOwned()) {
+      return;
+    }
+
+    // Find the existing entry
+    var existingEntry: SymbolReleaseEntry = null;
+    for (var i = 0; i < this.symbolReleaseMap.length; i++) {
+      var entry: SymbolReleaseEntry = this.symbolReleaseMap[i];
+      if (entry.symbol === node.symbol) {
+        existingEntry = entry;
+        break;
+      }
+    }
+
+    // Perform the error check
+    if (existingEntry !== null && (isOwnedPointerRelease || existingEntry.isReleased)) {
+      semanticErrorReleaseAndUse(this.log, node.range, node.symbol);
+    }
+
+    // Create the entry if needed
+    if (existingEntry === null) {
+      existingEntry = { symbol: node.symbol, isReleased: false, node: node };
+      this.symbolReleaseMap.push(existingEntry);
+    }
+
+    // Flag this entry to cause errors for future uses of this symbol
+    if (isOwnedPointerRelease) {
+      existingEntry.isReleased = true;
+    }
+  }
+
   checkImplicitCast(type: WrappedType, node: Expression) {
     if (!type.isError() && !node.computedType.isError()) {
       if (!TypeLogic.canImplicitlyConvert(node.computedType, type)) {
         semanticErrorIncompatibleTypes(this.log, node.range, node.computedType, type);
+        return;
       }
+    }
+
+    // Check for a use after release
+    if (node instanceof SymbolExpression) {
+      var n: SymbolExpression = <SymbolExpression>node;
+      this.checkSymbolExpression(n, n.symbol !== null && n.symbol.type.isOwned() && type.isOwned() ? IsOwnedPointerRelease.YES : IsOwnedPointerRelease.NO);
     }
   }
 
@@ -412,7 +469,10 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
     // Resolve all statements
     this.pushContext(this.context.cloneWithScope(node.scope));
     this.initializeBlock(node);
-    node.statements.forEach(n => n.acceptStatementVisitor(this));
+    node.statements.forEach(n => {
+      this.symbolReleaseMap = [];
+      n.acceptStatementVisitor(this);
+    });
     this.popContext();
   }
 
@@ -716,6 +776,11 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
     if (node.symbol === null) {
       semanticErrorUnknownMemberSymbol(this.log, node.id.range, node.id.name, node.value.computedType);
       return;
+    }
+
+    // Check for a use after release
+    if (node.value instanceof SymbolExpression) {
+      this.checkSymbolExpression(<SymbolExpression>node.value, IsOwnedPointerRelease.NO);
     }
 
     // Substitute the type parameters from the object into the member

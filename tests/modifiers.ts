@@ -207,3 +207,42 @@ test([
   '}',
 ], [
 ]);
+
+test([
+  'class Foo {',
+  '  int x = 0;',
+  '}',
+  'void bar(Foo a, int b) {}',
+  'void baz(int a, Foo b) {}',
+  'int main() {',
+  '  owned Foo foo = new Foo();',
+  '  bar(foo, foo.x);',
+  '  baz(foo.x, foo);',
+  '  return 0;',
+  '}',
+], [
+]);
+
+test([
+  'class Foo {',
+  '  int x = 0;',
+  '}',
+  'void bar(owned Foo a, int b) {}',
+  'void baz(int a, owned Foo b) {}',
+  'int main() {',
+  '  owned Foo foo = new Foo();',
+  '  bar(foo, foo.x);',
+  '  baz(foo.x, foo);',
+  '  return 0;',
+  '}',
+], [
+  'error on line 8 of <stdin>: foo is both released and used in the same expression',
+  '',
+  '  bar(foo, foo.x);',
+  '      ~~~',
+  '',
+  'error on line 9 of <stdin>: foo is both released and used in the same expression',
+  '',
+  '  baz(foo.x, foo);',
+  '             ~~~',
+]);

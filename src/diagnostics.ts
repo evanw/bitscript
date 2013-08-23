@@ -160,3 +160,7 @@ function semanticErrorParameterizedExpression(log: Log, range: SourceRange, type
 function semanticErrorBadParameter(log: Log, range: SourceRange, type: WrappedType) {
   log.error(range, 'cannot use ' + type + ' as a type parameter');
 }
+
+function semanticErrorReleaseAndUse(log: Log, range: SourceRange, symbol: Symbol) {
+  log.error(range, symbol.name + ' is both released and used in the same expression');
+}
