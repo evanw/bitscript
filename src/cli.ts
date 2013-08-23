@@ -65,7 +65,7 @@ function cli() {
     console.log(gray(time() + 'build failed\n\n') + indent(compiler.log.diagnostics.map(d => {
       var parts = d.range.sourceString().split('\n');
       return gray(d.type + ' on line ' + d.range.start.line + ' of ' + d.range.source.name + ': ') + red(d.text) + '\n\n' + parts[0] + '\n' + green(parts[1]) + '\n';
-    }).join('\n\n')));
+    }).join('\n')));
     return false;
   }
 

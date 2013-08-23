@@ -17,8 +17,7 @@ SOURCES= \
 	src/resolver.ts \
 	src/compiler.ts \
 	src/output.js.ts \
-	src/output.cpp.ts \
-	src/cli.ts
+	src/output.cpp.ts
 
 TESTS= \
 	tests/common.ts \
@@ -28,12 +27,12 @@ TESTS= \
 	tests/circular.ts
 
 build:
-	$(TSC) $(SOURCES) --sourcemap --out compiled.js
+	$(TSC) $(SOURCES) src/cli.ts --sourcemap --out compiled.js
 	python -c 'open("bitc", "w").write(open("compiled.js").read().replace("var usr_bin_env_node;", "#!/usr/bin/env node"))'
 	chmod +x bitc
 
 watch:
-	$(TSC) $(SOURCES) --sourcemap --out compiled.js -w
+	$(TSC) $(SOURCES) src/cli.ts --sourcemap --out compiled.js -w
 
 test:
 	$(TSC) $(SOURCES) $(TESTS) --sourcemap --out test.js

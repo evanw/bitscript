@@ -66,8 +66,8 @@ class TypeLogic {
   }
 
   static commonImplicitType(a: WrappedType, b: WrappedType): WrappedType {
-    if (TypeLogic.canImplicitlyConvert(a, b)) return b;
-    if (TypeLogic.canImplicitlyConvert(b, a)) return a;
+    if (TypeLogic.canImplicitlyConvert(a, b)) return b.wrapWithout(TypeModifier.STORAGE);
+    if (TypeLogic.canImplicitlyConvert(b, a)) return a.wrapWithout(TypeModifier.STORAGE);
     if (a.isObject() && b.isObject()) {
       var base: ObjectType = TypeLogic.commonBaseType(a.asObject(), b.asObject());
       if (base !== null) {

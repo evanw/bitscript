@@ -63,7 +63,7 @@ class Diagnostic {
   }
 
   toString(): string {
-    return this.type + ' ' + this.range.locationString() + '\n\n' + this.range.sourceString();
+    return this.type + ' ' + this.range.locationString() + ': ' + this.text + '\n\n' + this.range.sourceString();
   }
 }
 

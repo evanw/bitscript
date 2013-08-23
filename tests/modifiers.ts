@@ -142,3 +142,68 @@ test([
   '}',
 ], [
 ]);
+
+// TODO: Warn about each one individually
+test([
+  'class Foo {}',
+  'void main() {',
+  '  Foo bar = Math.random() < 0.5 ? new Foo() : new Foo();',
+  '}',
+], [
+  'error on line 3 of <stdin>: new object will be deleted immediately (store it somewhere with an owned or shared type instead)',
+  '',
+  '  Foo bar = Math.random() < 0.5 ? new Foo() : new Foo();',
+  '            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~',
+]);
+
+// TODO: Warn only about 'new Foo()', and also must not delete foo until the end of the scope
+test([
+  'class Foo {}',
+  'void main() {',
+  '  owned Foo foo = new Foo();',
+  '  Foo bar = Math.random() < 0.5 ? new Foo() : foo;',
+  '}',
+], [
+  'error on line 4 of <stdin>: new object will be deleted immediately (store it somewhere with an owned or shared type instead)',
+  '',
+  '  Foo bar = Math.random() < 0.5 ? new Foo() : foo;',
+  '            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~',
+]);
+
+// TODO: Warn only about 'new Foo()', and also must not delete foo until the end of the scope
+test([
+  'class Foo {}',
+  'void main() {',
+  '  owned Foo foo = new Foo();',
+  '  Foo bar = Math.random() < 0.5 ? foo : new Foo();',
+  '}',
+], [
+  'error on line 4 of <stdin>: new object will be deleted immediately (store it somewhere with an owned or shared type instead)',
+  '',
+  '  Foo bar = Math.random() < 0.5 ? foo : new Foo();',
+  '            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~',
+]);
+
+// TODO: This should work, and also must not delete foo until the end of the scope
+test([
+  'class Foo {}',
+  'void main() {',
+  '  owned Foo foo = new Foo();',
+  '  Foo bar = Math.random() < 0.5 ? foo : foo;',
+  '}',
+], [
+  'error on line 4 of <stdin>: new object will be deleted immediately (store it somewhere with an owned or shared type instead)',
+  '',
+  '  Foo bar = Math.random() < 0.5 ? foo : foo;',
+  '            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~',
+]);
+
+// This should work, and should transfer foo to bar
+test([
+  'class Foo {}',
+  'void main() {',
+  '  owned Foo foo = new Foo();',
+  '  owned Foo bar = Math.random() < 0.5 ? foo : foo;',
+  '}',
+], [
+]);

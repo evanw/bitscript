@@ -223,4 +223,8 @@ class WrappedType {
   wrapWith(flag: number): WrappedType {
     return new WrappedType(this.innerType, this.modifiers | flag, this.substitutions);
   }
+
+  wrapWithout(flag: number): WrappedType {
+    return new WrappedType(this.innerType, this.modifiers & ~flag, this.substitutions);
+  }
 }
