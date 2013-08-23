@@ -1,4 +1,6 @@
 declare var usr: any;
+declare var module: any;
+declare var exports: any;
 declare var require: any;
 declare var process: any;
 

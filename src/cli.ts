@@ -114,4 +114,71 @@ function cli() {
   }, 100);
 }
 
-if (typeof window === 'undefined') cli();
+// Export symbols if we are being used as a node library
+if (typeof exports !== 'undefined') {
+  // Log
+  exports.Source = Source;
+  exports.Marker = Marker;
+  exports.SourceRange = SourceRange;
+  exports.Diagnostic = Diagnostic;
+  exports.Log = Log;
+
+  // Other
+  exports.Symbol = Symbol;
+  exports.Scope = Scope;
+  exports.Token = Token;
+
+  // Types
+  exports.TypeLogic = TypeLogic;
+  exports.TypeModifier = TypeModifier;
+  exports.Type = Type;
+  exports.SpecialType = SpecialType;
+  exports.FunctionType = FunctionType;
+  exports.ObjectType = ObjectType;
+  exports.TypeParameter = TypeParameter;
+  exports.Substitution = Substitution;
+  exports.WrappedType = WrappedType;
+  exports.NativeTypes = NativeTypes;
+
+  // AST
+  exports.AST = AST;
+  exports.Module = Module;
+  exports.Identifier = Identifier;
+  exports.Block = Block;
+  exports.Statement = Statement;
+  exports.ExpressionStatement = ExpressionStatement;
+  exports.IfStatement = IfStatement;
+  exports.WhileStatement = WhileStatement;
+  exports.ReturnStatement = ReturnStatement;
+  exports.BreakStatement = BreakStatement;
+  exports.ContinueStatement = ContinueStatement;
+  exports.Declaration = Declaration;
+  exports.ObjectDeclaration = ObjectDeclaration;
+  exports.FunctionDeclaration = FunctionDeclaration;
+  exports.VariableDeclaration = VariableDeclaration;
+  exports.Expression = Expression;
+  exports.SymbolExpression = SymbolExpression;
+  exports.UnaryExpression = UnaryExpression;
+  exports.BinaryExpression = BinaryExpression;
+  exports.TernaryExpression = TernaryExpression;
+  exports.MemberExpression = MemberExpression;
+  exports.IntExpression = IntExpression;
+  exports.BoolExpression = BoolExpression;
+  exports.DoubleExpression = DoubleExpression;
+  exports.NullExpression = NullExpression;
+  exports.ThisExpression = ThisExpression;
+  exports.CallExpression = CallExpression;
+  exports.NewExpression = NewExpression;
+  exports.TypeModifierExpression = TypeModifierExpression;
+  exports.TypeParameterExpression = TypeParameterExpression;
+
+  // API
+  exports.Compiler = Compiler;
+  exports.OutputJS = OutputJS;
+  exports.OutputCPP = OutputCPP;
+}
+
+// Launch the command-line interface if we are run from the terminal
+if (require.main === module) {
+  cli();
+}
