@@ -1,3 +1,5 @@
+var usr_bin_env_node;
+
 function assert(truth) {
     if (!truth) {
         throw new Error('assertion failed');
@@ -36,6 +38,16 @@ var SourceRange = (function () {
         this.start = start;
         this.end = end;
     }
+    SourceRange.prototype.locationString = function () {
+        return 'on line ' + this.start.line + ' of ' + this.source.name;
+    };
+
+    SourceRange.prototype.sourceString = function () {
+        var line = this.source.lines[this.start.line - 1];
+        var a = this.start.column - 1;
+        var b = this.end.line === this.start.line ? this.end.column - 1 : line.length;
+        return line + '\n' + repeat(' ', a) + (b - a < 2 ? '^' : repeat('~', b - a));
+    };
     return SourceRange;
 })();
 
@@ -46,13 +58,7 @@ var Diagnostic = (function () {
         this.text = text;
     }
     Diagnostic.prototype.toString = function () {
-        var source = this.range.source;
-        var start = this.range.start;
-        var end = this.range.end;
-        var line = source.lines[start.line - 1];
-        var a = start.column - 1;
-        var b = end.line === start.line ? end.column - 1 : line.length;
-        return this.type + ' on line ' + start.line + ' of ' + source.name + ': ' + this.text + '\n\n' + line + '\n' + repeat(' ', a) + (b - a < 2 ? '^' : repeat('~', b - a)) + '\n';
+        return this.type + ' ' + this.range.locationString() + ': ' + this.text + '\n\n' + this.range.sourceString();
     };
     return Diagnostic;
 })();
@@ -60,11 +66,11 @@ var Diagnostic = (function () {
 var Log = (function () {
     function Log() {
         this.diagnostics = [];
-        this.hasErrors = false;
+        this.errorCount = 0;
     }
     Log.prototype.error = function (range, text) {
         this.diagnostics.push(new Diagnostic('error', range, text));
-        this.hasErrors = true;
+        this.errorCount++;
     };
 
     Log.prototype.warning = function (range, text) {
@@ -225,6 +231,10 @@ function semanticErrorParameterizedExpression(log, range, type) {
 function semanticErrorBadParameter(log, range, type) {
     log.error(range, 'cannot use ' + type + ' as a type parameter');
 }
+
+function semanticErrorReleaseAndUse(log, range, symbol) {
+    log.error(range, symbol.name + ' is both released and used in the same expression');
+}
 var Token = (function () {
     function Token(range, kind, text) {
         this.range = range;
@@ -299,7 +309,6 @@ function tokenize(log, source) {
         'this',
         'owned',
         'shared',
-        'ref',
         'over'
     ];
 
@@ -666,6 +675,10 @@ var WrappedType = (function () {
     WrappedType.prototype.wrapWith = function (flag) {
         return new WrappedType(this.innerType, this.modifiers | flag, this.substitutions);
     };
+
+    WrappedType.prototype.wrapWithout = function (flag) {
+        return new WrappedType(this.innerType, this.modifiers & ~flag, this.substitutions);
+    };
     return WrappedType;
 })();
 var SymbolModifier;
@@ -753,6 +766,8 @@ var NativeTypes = (function () {
 })();
 
 // TODO: Use static functions when those work
+// TODO: Need Math.round()
+// TODO: Need a way to convert from double to int
 NativeTypes.MATH.scope.define('E', SpecialType.DOUBLE.wrap(TypeModifier.INSTANCE));
 NativeTypes.MATH.scope.define('PI', SpecialType.DOUBLE.wrap(TypeModifier.INSTANCE));
 NativeTypes.MATH.scope.define('NAN', SpecialType.DOUBLE.wrap(TypeModifier.INSTANCE));
@@ -764,8 +779,8 @@ NativeTypes.MATH.scope.define('acos', NativeTypes.createFunction(SpecialType.DOU
 NativeTypes.MATH.scope.define('asin', NativeTypes.createFunction(SpecialType.DOUBLE, [SpecialType.DOUBLE]));
 NativeTypes.MATH.scope.define('atan', NativeTypes.createFunction(SpecialType.DOUBLE, [SpecialType.DOUBLE]));
 NativeTypes.MATH.scope.define('atan2', NativeTypes.createFunction(SpecialType.DOUBLE, [SpecialType.DOUBLE, SpecialType.DOUBLE]));
-NativeTypes.MATH.scope.define('floor', NativeTypes.createFunction(SpecialType.DOUBLE, [SpecialType.DOUBLE]));
-NativeTypes.MATH.scope.define('ceil', NativeTypes.createFunction(SpecialType.DOUBLE, [SpecialType.DOUBLE]));
+NativeTypes.MATH.scope.define('floor', NativeTypes.createFunction(SpecialType.INT, [SpecialType.DOUBLE]));
+NativeTypes.MATH.scope.define('ceil', NativeTypes.createFunction(SpecialType.INT, [SpecialType.DOUBLE]));
 NativeTypes.MATH.scope.define('abs', NativeTypes.createFunction(SpecialType.DOUBLE, [SpecialType.DOUBLE]));
 NativeTypes.MATH.scope.define('log', NativeTypes.createFunction(SpecialType.DOUBLE, [SpecialType.DOUBLE]));
 NativeTypes.MATH.scope.define('exp', NativeTypes.createFunction(SpecialType.DOUBLE, [SpecialType.DOUBLE]));
@@ -1835,9 +1850,9 @@ var TypeLogic = (function () {
 
     TypeLogic.commonImplicitType = function (a, b) {
         if (TypeLogic.canImplicitlyConvert(a, b))
-            return b;
+            return b.wrapWithout(TypeModifier.STORAGE);
         if (TypeLogic.canImplicitlyConvert(b, a))
-            return a;
+            return a.wrapWithout(TypeModifier.STORAGE);
         if (a.isObject() && b.isObject()) {
             var base = TypeLogic.commonBaseType(a.asObject(), b.asObject());
             if (base !== null) {
@@ -2073,6 +2088,12 @@ var Initializer = (function () {
     return Initializer;
 })();
 
+var IsOwnedPointerRelease;
+(function (IsOwnedPointerRelease) {
+    IsOwnedPointerRelease[IsOwnedPointerRelease["NO"] = 0] = "NO";
+    IsOwnedPointerRelease[IsOwnedPointerRelease["YES"] = 1] = "YES";
+})(IsOwnedPointerRelease || (IsOwnedPointerRelease = {}));
+
 var Resolver = (function () {
     function Resolver(log) {
         this.log = log;
@@ -2081,6 +2102,11 @@ var Resolver = (function () {
         this.isInitialized = {};
         this.definitionContext = {};
         this.initializer = new Initializer(this);
+        // Releasing and using a symbol in the same expression is an error due to the
+        // unspecified order of operations in C++ and because it's likely a bug. This
+        // tracks all symbol expressions that have been released (std::move() in C++)
+        // and is cleared at the start of each statement.
+        this.symbolReleaseMap = [];
     }
     Resolver.resolve = function (log, module) {
         new Resolver(log).visitBlock(module.block);
@@ -2189,11 +2215,46 @@ var Resolver = (function () {
         }
     };
 
+    Resolver.prototype.checkSymbolExpression = function (node, isOwnedPointerRelease) {
+        if (node.symbol === null || !node.symbol.type.isOwned()) {
+            return;
+        }
+
+        // Find the existing entry
+        var existingEntry = null;
+        for (var i = 0; i < this.symbolReleaseMap.length; i++) {
+            var entry = this.symbolReleaseMap[i];
+            if (entry.symbol === node.symbol) {
+                existingEntry = entry;
+                break;
+            }
+        }
+
+        if (existingEntry !== null && (isOwnedPointerRelease || existingEntry.isReleased)) {
+            semanticErrorReleaseAndUse(this.log, node.range, node.symbol);
+        }
+
+        if (existingEntry === null) {
+            existingEntry = { symbol: node.symbol, isReleased: false, node: node };
+            this.symbolReleaseMap.push(existingEntry);
+        }
+
+        if (isOwnedPointerRelease) {
+            existingEntry.isReleased = true;
+        }
+    };
+
     Resolver.prototype.checkImplicitCast = function (type, node) {
         if (!type.isError() && !node.computedType.isError()) {
             if (!TypeLogic.canImplicitlyConvert(node.computedType, type)) {
                 semanticErrorIncompatibleTypes(this.log, node.range, node.computedType, type);
+                return;
             }
+        }
+
+        if (node instanceof SymbolExpression) {
+            var n = node;
+            this.checkSymbolExpression(n, n.symbol !== null && n.symbol.type.isOwned() && type.isOwned() ? IsOwnedPointerRelease.YES : IsOwnedPointerRelease.NO);
         }
     };
 
@@ -2320,7 +2381,8 @@ var Resolver = (function () {
         this.pushContext(this.context.cloneWithScope(node.scope));
         this.initializeBlock(node);
         node.statements.forEach(function (n) {
-            return n.acceptStatementVisitor(_this);
+            _this.symbolReleaseMap = [];
+            n.acceptStatementVisitor(_this);
         });
         this.popContext();
     };
@@ -2621,6 +2683,10 @@ var Resolver = (function () {
             return;
         }
 
+        if (node.value instanceof SymbolExpression) {
+            this.checkSymbolExpression(node.value, IsOwnedPointerRelease.NO);
+        }
+
         // Substitute the type parameters from the object into the member
         node.computedType = TypeLogic.substitute(node.symbol.type, node.value.computedType.substitutions);
     };
@@ -2763,29 +2829,44 @@ var Resolver = (function () {
     return Resolver;
 })();
 var Compiler = (function () {
-    function Compiler(input) {
+    function Compiler() {
         this.log = new Log();
-        this.tokens = null;
+        this.sources = [];
+        this.tokens = [];
         this.module = null;
-        var source = new Source('<stdin>', input);
-
-        // Tokenize
-        this.tokens = prepareTokens(tokenize(this.log, source));
-        if (this.log.hasErrors)
-            return;
-
-        // Parse
-        this.module = parse(this.log, this.tokens);
-        if (this.log.hasErrors)
-            return;
-
-        // Resolve
-        Resolver.resolve(this.log, this.module);
-        if (this.log.hasErrors)
-            return;
     }
+    Compiler.prototype.addSource = function (fileName, input) {
+        this.sources.push(new Source(fileName, input));
+    };
+
+    Compiler.prototype.compile = function () {
+        var _this = this;
+        // Tokenize and parse each module individually
+        var modules = this.sources.map(function (source) {
+            var errorCount = _this.log.errorCount;
+            var tokens = prepareTokens(tokenize(_this.log, source));
+            _this.tokens = _this.tokens.concat(tokens);
+            return _this.log.errorCount === errorCount ? parse(_this.log, tokens) : null;
+        });
+        if (this.log.errorCount > 0)
+            return;
+
+        // Create one module and resolve everything together
+        this.module = new Module(null, new Block(null, flatten(modules.map(function (n) {
+            return n.block.statements;
+        }))));
+        Resolver.resolve(this.log, this.module);
+    };
     return Compiler;
 })();
+if (typeof esprima === 'undefined') {
+    var esprima = require('esprima');
+}
+
+if (typeof escodegen === 'undefined') {
+    var escodegen = require('escodegen');
+}
+
 var OutputJS = (function () {
     function OutputJS() {
         this.needExtendsPolyfill = false;
@@ -3387,6 +3468,10 @@ var OutputJS = (function () {
     };
     return OutputJS;
 })();
+if (typeof cppcodegen === 'undefined') {
+    var cppcodegen = require('cppcodegen');
+}
+
 var OutputCPP = (function () {
     function OutputCPP() {
         this.needMemoryHeader = false;
@@ -4379,4 +4464,209 @@ var OutputCPP = (function () {
     };
     return OutputCPP;
 })();
+function cli() {
+    var inputs = [];
+    var outputJS = null;
+    var outputCPP = null;
+    var helpFlag = false;
+    var watchFlag = false;
+
+    var fs = require('fs');
+    var tty = require('tty');
+    var path = require('path');
+    var notifier = require('terminal-notifier');
+    var useColors = tty.isatty(1) && tty.isatty(2);
+
+    function time() {
+        var now = new Date();
+        if (!watchFlag)
+            return '';
+        return ((now.getHours() % 12 + 11) % 12 + 1) + ':' + (100 + now.getMinutes()).toString().slice(1) + ['am', 'pm'][now.getHours() / 12 | 0] + ' - ';
+    }
+
+    function indent(text) {
+        return '  ' + text.replace(/\n/g, '\n  ');
+    }
+
+    function wrapColor(color) {
+        if (!useColors)
+            return function (text) {
+                return text;
+            };
+        return function (text) {
+            return '\u001b[' + color + 'm' + text + '\u001b[0m';
+        };
+    }
+
+    var gray = wrapColor(90);
+    var red = wrapColor(91);
+    var green = wrapColor(92);
+
+    function showNotification(diagnostic) {
+        if (!watchFlag)
+            return;
+        var options = {
+            title: diagnostic.range !== null ? diagnostic.range.source.name + ' on line ' + diagnostic.range.start.line : 'Build error',
+            group: 'bitscript'
+        };
+        if (diagnostic.range !== null && process.env.EDITOR) {
+            options.execute = process.env.EDITOR + ' "' + path.resolve(diagnostic.range.source.name) + ':' + diagnostic.range.start.line + '"';
+        }
+        notifier(diagnostic.text, options);
+    }
+
+    function compile() {
+        var compiler = new Compiler();
+        inputs.forEach(function (input) {
+            return compiler.addSource(input, fs.readFileSync(input, 'utf8'));
+        });
+        compiler.compile();
+
+        if (compiler.log.errorCount === 0) {
+            if (outputJS !== null)
+                fs.writeFileSync(outputJS, OutputJS.generate(compiler.module) + '\n');
+            if (outputCPP !== null)
+                fs.writeFileSync(outputCPP, OutputCPP.generate(compiler.module) + '\n');
+            console.log(gray(time() + 'build successful'));
+            return true;
+        }
+
+        if (outputJS !== null && fs.existsSync(outputJS))
+            fs.unlinkSync(outputJS);
+        if (outputCPP !== null && fs.existsSync(outputCPP))
+            fs.unlinkSync(outputCPP);
+        if (watchFlag)
+            showNotification(compiler.log.diagnostics[0]);
+
+        // Use fancy colored output for TTYs
+        console.log(gray(time() + 'build failed\n\n') + indent(compiler.log.diagnostics.map(function (d) {
+            var parts = d.range.sourceString().split('\n');
+            return gray(d.type + ' on line ' + d.range.start.line + ' of ' + d.range.source.name + ': ') + red(d.text) + '\n\n' + parts[0] + '\n' + green(parts[1]) + '\n';
+        }).join('\n')));
+        return false;
+    }
+
+    // Return a unique string that will change when one of the files changes
+    function stat() {
+        return inputs.map(function (input) {
+            return input + fs.statSync(input).mtime;
+        }).join('\n');
+    }
+
+    function usage() {
+        console.log([
+            '',
+            'usage: bitc in1.bit in2.bit ... [--js out.js] [--cpp out.cpp] [--watch]',
+            ''
+        ].join('\n'));
+    }
+
+    // Parse command-line flags
+    var args = process.argv.slice(2);
+    while (args.length > 0) {
+        var arg = args.shift();
+        switch (arg) {
+            case '-h':
+            case '--help':
+                helpFlag = true;
+                break;
+            case '--watch':
+                watchFlag = true;
+                break;
+            case '--js':
+                outputJS = args.shift();
+                break;
+            case '--cpp':
+                outputCPP = args.shift();
+                break;
+            default:
+                inputs.push(arg);
+                break;
+        }
+    }
+
+    if (helpFlag || outputJS === void 0 || outputCPP === void 0 || inputs.length === 0 || outputJS === null && outputCPP === null) {
+        usage();
+        process.exit(1);
+    }
+
+    if (!watchFlag)
+        process.exit(compile() ? 0 : 1);
+    var oldStat = stat();
+    compile();
+    setInterval(function () {
+        var newStat = stat();
+        if (oldStat !== newStat) {
+            oldStat = newStat;
+            compile();
+        }
+    }, 100);
+}
+
+if (typeof exports !== 'undefined') {
+    // Log
+    exports.Source = Source;
+    exports.Marker = Marker;
+    exports.SourceRange = SourceRange;
+    exports.Diagnostic = Diagnostic;
+    exports.Log = Log;
+
+    // Other
+    exports.Symbol = Symbol;
+    exports.Scope = Scope;
+    exports.Token = Token;
+
+    // Types
+    exports.TypeLogic = TypeLogic;
+    exports.TypeModifier = TypeModifier;
+    exports.Type = Type;
+    exports.SpecialType = SpecialType;
+    exports.FunctionType = FunctionType;
+    exports.ObjectType = ObjectType;
+    exports.TypeParameter = TypeParameter;
+    exports.Substitution = Substitution;
+    exports.WrappedType = WrappedType;
+    exports.NativeTypes = NativeTypes;
+
+    // AST
+    exports.AST = AST;
+    exports.Module = Module;
+    exports.Identifier = Identifier;
+    exports.Block = Block;
+    exports.Statement = Statement;
+    exports.ExpressionStatement = ExpressionStatement;
+    exports.IfStatement = IfStatement;
+    exports.WhileStatement = WhileStatement;
+    exports.ReturnStatement = ReturnStatement;
+    exports.BreakStatement = BreakStatement;
+    exports.ContinueStatement = ContinueStatement;
+    exports.Declaration = Declaration;
+    exports.ObjectDeclaration = ObjectDeclaration;
+    exports.FunctionDeclaration = FunctionDeclaration;
+    exports.VariableDeclaration = VariableDeclaration;
+    exports.Expression = Expression;
+    exports.SymbolExpression = SymbolExpression;
+    exports.UnaryExpression = UnaryExpression;
+    exports.BinaryExpression = BinaryExpression;
+    exports.TernaryExpression = TernaryExpression;
+    exports.MemberExpression = MemberExpression;
+    exports.IntExpression = IntExpression;
+    exports.BoolExpression = BoolExpression;
+    exports.DoubleExpression = DoubleExpression;
+    exports.NullExpression = NullExpression;
+    exports.ThisExpression = ThisExpression;
+    exports.CallExpression = CallExpression;
+    exports.NewExpression = NewExpression;
+    exports.TypeModifierExpression = TypeModifierExpression;
+    exports.TypeParameterExpression = TypeParameterExpression;
+
+    // API
+    exports.Compiler = Compiler;
+    exports.OutputJS = OutputJS;
+    exports.OutputCPP = OutputCPP;
+}
+
+if (require.main === module) {
+    cli();
+}
 //# sourceMappingURL=compiled.js.map

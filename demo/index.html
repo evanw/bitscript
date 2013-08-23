@@ -283,13 +283,15 @@ function showTextInFirstVisiblePannel(panels, text) {
 
 function recompile() {
   try {
-    var compiler = new Compiler(panelNamed('BitScript').editor.getValue());
+    var compiler = new Compiler();
+    compiler.addSource('<stdin>', panelNamed('BitScript').editor.getValue());
+    compiler.compile();
     panelNamed('Tokens').setTextIfVisible(function() { return compiler.tokens.map(printToken).join('\n'); });
 
     // If there were error messages, stick error messages in the first pannel
     // that would otherwise be blank and blank out the rest of the pannels
     var blankPannels = [];
-    if (!compiler.log.hasErrors) {
+    if (compiler.log.errorCount === 0) {
       panelNamed('JavaScript').setTextIfVisible(function() { return OutputJS.generate(compiler.module) + '\n'; });
       panelNamed('C++11').setTextIfVisible(function() { return OutputCPP.generate(compiler.module) + '\n'; });
     } else {
@@ -300,8 +302,8 @@ function recompile() {
     } else {
       blankPannels.push(panelNamed('AST'));
     }
-    if (compiler.log.hasErrors) {
-      showTextInFirstVisiblePannel(blankPannels, compiler.log.diagnostics.join('\n'));
+    if (compiler.log.errorCount > 0) {
+      showTextInFirstVisiblePannel(blankPannels, compiler.log.diagnostics.join('\n\n'));
     }
   } catch (e) {
     showTextInFirstVisiblePannel(panels, (e.stack || e) + '');
