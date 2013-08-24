@@ -4206,6 +4206,15 @@ var OutputCPP = (function () {
     };
 
     OutputCPP.prototype.visitBinaryExpression = function (node) {
+        if (node.op === '==' || node.op === '!=') {
+            return {
+                kind: 'BinaryExpression',
+                operator: node.op,
+                left: this.insertImplicitConversion(node.left, node.left.computedType.wrapWithout(TypeModifier.OWNED | TypeModifier.SHARED)),
+                right: this.insertImplicitConversion(node.right, node.right.computedType.wrapWithout(TypeModifier.OWNED | TypeModifier.SHARED))
+            };
+        }
+
         return {
             kind: node.op === '=' ? 'AssignmentExpression' : 'BinaryExpression',
             operator: node.op,
