@@ -2577,6 +2577,7 @@ var Resolver = (function () {
             this.checkImplicitCast(left, node.right);
             this.checkRValueToRawPointer(left, node.right);
             this.checkStorage(node.left);
+            node.computedType = left;
             return;
         }
 
@@ -3523,7 +3524,11 @@ var OutputCPP = (function () {
     }
     OutputCPP.generate = function (node) {
         var output = new OutputCPP();
-        var result = cppcodegen.generate(output.visitModule(node), { indent: '  ', cpp11: true }).trim();
+        var result = cppcodegen.generate(output.visitModule(node), {
+            indent: '  ',
+            cpp11: true,
+            parenthesizeAndInsideOr: true
+        }).trim();
 
         // Cheat for now since I don't feel like writing tons of JSON
         var listStuff = '';
