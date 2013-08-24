@@ -50,14 +50,23 @@ function cli() {
     inputs.forEach(input => compiler.addSource(input, fs.readFileSync(input, 'utf8')));
     compiler.compile();
 
+    // Output code on success
     if (compiler.log.errorCount === 0) {
-      if (outputJS !== null) fs.writeFileSync(outputJS, OutputJS.generate(compiler.module) + '\n');
+      if (outputJS !== null) {
+        var codeAndMap: { code: string; map: string } = OutputJS.generateWithSourceMap(compiler.module);
+        fs.writeFileSync(outputJS, codeAndMap.code + '\n//# sourceMappingURL=' + path.basename(outputJS) + '.map\n');
+        fs.writeFileSync(outputJS + '.map', codeAndMap.map + '\n');
+      }
       if (outputCPP !== null) fs.writeFileSync(outputCPP, OutputCPP.generate(compiler.module) + '\n');
       console.log(gray(time() + 'build successful'));
       return true;
     }
 
-    if (outputJS !== null && fs.existsSync(outputJS)) fs.unlinkSync(outputJS);
+    // Remove files on failure
+    if (outputJS !== null && fs.existsSync(outputJS)) {
+      fs.unlinkSync(outputJS);
+      fs.unlinkSync(outputJS + '.map');
+    }
     if (outputCPP !== null && fs.existsSync(outputCPP)) fs.unlinkSync(outputCPP);
     if (watchFlag) showNotification(compiler.log.diagnostics[0]);
 
@@ -179,6 +188,6 @@ if (typeof exports !== 'undefined') {
 }
 
 // Launch the command-line interface if we are run from the terminal
-if (require.main === module) {
+if (typeof require !== 'undefined' && typeof module !== 'undefined' && require.main === module) {
   cli();
 }
