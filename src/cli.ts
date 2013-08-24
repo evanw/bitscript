@@ -53,7 +53,8 @@ function cli() {
     // Output code on success
     if (compiler.log.errorCount === 0) {
       if (outputJS !== null) {
-        var codeAndMap: { code: string; map: string } = OutputJS.generateWithSourceMap(compiler.module);
+        var root: string = path.relative(path.dirname(outputJS), '.');
+        var codeAndMap: { code: string; map: string } = OutputJS.generateWithSourceMap(compiler.module, root);
         fs.writeFileSync(outputJS, codeAndMap.code + '\n//# sourceMappingURL=' + path.basename(outputJS) + '.map\n');
         fs.writeFileSync(outputJS + '.map', codeAndMap.map + '\n');
       }

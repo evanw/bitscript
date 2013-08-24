@@ -20,7 +20,7 @@ class OutputJS implements StatementVisitor<Object>, DeclarationVisitor<Object>, 
     });
   }
 
-  static generateWithSourceMap(node: Module): { code: string; map: string } {
+  static generateWithSourceMap(node: Module, root: string): { code: string; map: string } {
     return escodegen.generate(new OutputJS((node, result) => {
       // Source map support in escodegen is pretty bad. Every single object
       // that escodegen touches must have a valid location or it puts NaNs in
@@ -47,6 +47,7 @@ class OutputJS implements StatementVisitor<Object>, DeclarationVisitor<Object>, 
       return result;
     }).visitModule(node), {
       sourceMap: true,
+      sourceMapRoot: root,
       sourceMapWithCode: true,
       format: { indent: { style: '  ' } }
     });
