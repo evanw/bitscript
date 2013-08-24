@@ -2868,12 +2868,43 @@ if (typeof escodegen === 'undefined') {
 }
 
 var OutputJS = (function () {
-    function OutputJS() {
+    function OutputJS(wrap) {
+        this.wrap = wrap;
         this.needExtendsPolyfill = false;
         this.needMultiplicationPolyfill = false;
     }
     OutputJS.generate = function (node) {
-        return escodegen.generate(new OutputJS().visitModule(node), { format: { indent: { style: '  ' } } });
+        return escodegen.generate(new OutputJS(function (node, result) {
+            return result;
+        }).visitModule(node), {
+            format: { indent: { style: '  ' } }
+        });
+    };
+
+    OutputJS.generateWithSourceMap = function (node) {
+        return escodegen.generate(new OutputJS(function (node, result) {
+            if (node.range !== null) {
+                var start = node.range.start;
+                var end = node.range.end;
+                result.loc = {
+                    source: node.range.source.name,
+                    start: {
+                        line: start.line,
+                        column: start.column - 1
+                    },
+                    end: {
+                        line: end.line,
+                        column: end.column - 1
+                    }
+                };
+            }
+
+            return result;
+        }).visitModule(node), {
+            sourceMap: true,
+            sourceMapWithCode: true,
+            format: { indent: { style: '  ' } }
+        });
     };
 
     OutputJS.prototype.defaultForType = function (type) {
@@ -2898,7 +2929,7 @@ var OutputJS = (function () {
                     return n.acceptStatementVisitor(_this);
                 }),
                 node.block.statements.filter(function (n) {
-                    return n instanceof FunctionDeclaration;
+                    return n instanceof FunctionDeclaration && n.block !== null;
                 }).map(function (n) {
                     return n.acceptStatementVisitor(_this);
                 })
@@ -2927,70 +2958,70 @@ var OutputJS = (function () {
             ].join('\n')));
         }
 
-        return result;
+        return this.wrap(node, result);
     };
 
     OutputJS.prototype.visitBlock = function (node) {
         var _this = this;
-        return {
+        return this.wrap(node, {
             type: 'BlockStatement',
             body: node.statements.map(function (n) {
                 return n.acceptStatementVisitor(_this);
             })
-        };
+        });
     };
 
     OutputJS.prototype.visitIdentifier = function (node) {
-        return {
+        return this.wrap(node, {
             type: 'Identifier',
             name: node.name
-        };
+        });
     };
 
     OutputJS.prototype.visitExpressionStatement = function (node) {
-        return {
+        return this.wrap(node, {
             type: 'ExpressionStatement',
             expression: node.value.acceptExpressionVisitor(this)
-        };
+        });
     };
 
     OutputJS.prototype.visitIfStatement = function (node) {
         var elseBlock = node.elseBlock !== null ? this.visitBlock(node.elseBlock) : null;
-        return {
+        return this.wrap(node, {
             type: 'IfStatement',
             test: node.test.acceptExpressionVisitor(this),
             consequent: this.visitBlock(node.thenBlock),
             alternate: elseBlock !== null && elseBlock.body.length === 1 && elseBlock.body[0].type === 'IfStatement' ? elseBlock.body[0] : elseBlock
-        };
+        });
     };
 
     OutputJS.prototype.visitWhileStatement = function (node) {
-        return {
+        return this.wrap(node, {
             type: 'WhileStatement',
             test: node.test.acceptExpressionVisitor(this),
             body: this.visitBlock(node.block)
-        };
+        });
     };
 
     OutputJS.prototype.visitReturnStatement = function (node) {
-        return {
+        return this.wrap(node, {
             type: 'ReturnStatement',
             argument: node.value !== null ? node.value.acceptExpressionVisitor(this) : null
-        };
+        });
     };
 
     OutputJS.prototype.visitBreakStatement = function (node) {
-        return {
+        return this.wrap(node, {
             type: 'BreakStatement',
             label: null
-        };
+        });
     };
 
     OutputJS.prototype.visitContinueStatement = function (node) {
-        return {
+        return this.wrap(node, {
             type: 'ContinueStatement',
             label: null
-        };
+        });
     };
 
     OutputJS.prototype.visitDeclaration = function (node) {
@@ -3018,7 +3049,7 @@ var OutputJS = (function () {
 
         // Create the constructor function
         var result = [
-            {
+            this.wrap(node, {
                 type: 'FunctionDeclaration',
                 params: baseVariables.concat(variables.filter(function (n) {
                     return n.value === null;
@@ -3026,63 +3057,63 @@ var OutputJS = (function () {
                     return _this.visitIdentifier(n.id);
                 }),
                 id: this.visitIdentifier(node.id),
-                body: {
+                body: this.wrap(node, {
                     type: 'BlockStatement',
                     body: variables.map(function (n) {
-                        return {
+                        return _this.wrap(node, {
                             type: 'ExpressionStatement',
-                            expression: {
+                            expression: _this.wrap(node, {
                                 type: 'AssignmentExpression',
                                 operator: '=',
-                                left: {
+                                left: _this.wrap(node, {
                                     type: 'MemberExpression',
-                                    object: {
+                                    object: _this.wrap(node, {
                                         type: 'ThisExpression'
-                                    },
+                                    }),
                                     property: _this.visitIdentifier(n.id),
                                     computed: false
-                                },
+                                }),
                                 right: n.value !== null ? n.value.acceptExpressionVisitor(_this) : _this.visitIdentifier(n.id)
-                            }
-                        };
+                            })
+                        });
                     })
-                }
-            }
+                })
+            })
         ];
 
         if (node.base !== null) {
             // Add a call to the constructor for the base class
-            result[0].body.body.unshift({
+            result[0].body.body.unshift(this.wrap(node, {
                 type: 'ExpressionStatement',
-                expression: {
+                expression: this.wrap(node, {
                     type: 'CallExpression',
-                    callee: {
+                    callee: this.wrap(node, {
                         type: 'MemberExpression',
                         object: node.base.acceptExpressionVisitor(this),
-                        property: { type: 'Identifier', name: 'call' }
-                    },
-                    arguments: [{ type: 'ThisExpression' }].concat(baseVariables.map(function (n) {
+                        property: this.wrap(node, { type: 'Identifier', name: 'call' })
+                    }),
+                    arguments: [this.wrap(node, { type: 'ThisExpression' })].concat(baseVariables.map(function (n) {
                         return _this.visitIdentifier(n.id);
                     }))
-                }
-            });
+                })
+            }));
 
             // Add a call to __extends()
             this.needExtendsPolyfill = true;
-            result.push({
+            result.push(this.wrap(node, {
                 type: 'ExpressionStatement',
-                expression: {
+                expression: this.wrap(node, {
                     type: 'CallExpression',
-                    callee: { type: 'Identifier', name: '__extends' },
+                    callee: this.wrap(node, { type: 'Identifier', name: '__extends' }),
                     arguments: [
                         this.visitIdentifier(node.id),
                         node.base.acceptExpressionVisitor(this)
                     ]
-                }
-            });
+                })
+            }));
         }
 
-        return result;
+        return this.wrap(node, result);
     };
 
     OutputJS.prototype.generateMemberFunctions = function (node) {
@@ -3093,23 +3124,23 @@ var OutputJS = (function () {
             var result = _this.visitFunctionDeclaration(n);
             result.type = 'FunctionExpression';
             result.id = null;
-            return {
+            return _this.wrap(n, {
                 type: 'ExpressionStatement',
-                expression: {
+                expression: _this.wrap(n, {
                     type: 'AssignmentExpression',
                     operator: '=',
-                    left: {
+                    left: _this.wrap(n, {
                         type: 'MemberExpression',
-                        object: {
+                        object: _this.wrap(n, {
                             type: 'MemberExpression',
                             object: _this.visitIdentifier(node.id),
-                            property: { type: 'Identifier', name: 'prototype' }
-                        },
+                            property: _this.wrap(n, { type: 'Identifier', name: 'prototype' })
+                        }),
                         property: _this.visitIdentifier(n.id)
-                    },
+                    }),
                     right: result
-                }
-            };
+                })
+            });
         });
     };
 
@@ -3124,75 +3155,76 @@ var OutputJS = (function () {
 
     OutputJS.prototype.visitFunctionDeclaration = function (node) {
         var _this = this;
-        return {
+        assert(node.block !== null);
+        return this.wrap(node, {
             type: 'FunctionDeclaration',
             params: node.args.map(function (n) {
                 return _this.visitIdentifier(n.id);
             }),
             id: this.visitIdentifier(node.id),
-            body: node.block !== null ? this.visitBlock(node.block) : { type: 'BlockStatement', body: [] }
-        };
+            body: this.visitBlock(node.block)
+        });
     };
 
     OutputJS.prototype.visitVariableDeclaration = function (node) {
-        return {
+        return this.wrap(node, {
             type: 'VariableDeclaration',
             kind: 'var',
             declarations: [
-                {
+                this.wrap(node, {
                     type: 'VariableDeclarator',
                     id: this.visitIdentifier(node.id),
                     init: node.value !== null ? node.value.acceptExpressionVisitor(this) : this.defaultForType(node.symbol.type)
-                }
+                })
             ]
-        };
+        });
     };
 
     OutputJS.prototype.visitSymbolExpression = function (node) {
-        var result = {
+        var result = this.wrap(node, {
             type: 'Identifier',
             name: node.name
-        };
+        });
 
         if (node.symbol.enclosingObject !== null) {
-            return {
+            return this.wrap(node, {
                 type: 'MemberExpression',
-                object: {
+                object: this.wrap(node, {
                     type: 'ThisExpression'
-                },
+                }),
                 property: result
-            };
+            });
         }
 
         return result;
     };
 
-    OutputJS.prototype.wrapIntegerOperator = function (result) {
+    OutputJS.prototype.wrapIntegerOperator = function (node, result) {
         if (result.type === 'UnaryExpression' && result.argument.type === 'Literal') {
             return result;
         }
 
-        return {
+        return this.wrap(node, {
             type: 'BinaryExpression',
             operator: '|',
             left: result,
-            right: {
+            right: this.wrap(node, {
                 type: 'Literal',
                 value: 0
-            }
-        };
+            })
+        });
     };
 
     OutputJS.prototype.visitUnaryExpression = function (node) {
-        var result = {
+        var result = this.wrap(node, {
             type: 'UnaryExpression',
             operator: node.op,
             argument: node.value.acceptExpressionVisitor(this),
             prefix: true
-        };
+        });
 
         if (!OutputJS.INTEGER_OPS[node.op] && node.computedType.innerType === SpecialType.INT) {
-            result = this.wrapIntegerOperator(result);
+            result = this.wrapIntegerOperator(node, result);
         }
 
         return result;
@@ -3201,99 +3233,99 @@ var OutputJS = (function () {
     OutputJS.prototype.visitBinaryExpression = function (node) {
         if (node.op === '*' && node.computedType.innerType === SpecialType.INT) {
             this.needMultiplicationPolyfill = true;
-            return {
+            return this.wrap(node, {
                 type: 'CallExpression',
-                callee: {
+                callee: this.wrap(node, {
                     type: 'MemberExpression',
-                    object: { type: 'Identifier', name: 'Math' },
-                    property: { type: 'Identifier', name: 'imul' }
-                },
+                    object: this.wrap(node, { type: 'Identifier', name: 'Math' }),
+                    property: this.wrap(node, { type: 'Identifier', name: 'imul' })
+                }),
                 arguments: [
                     node.left.acceptExpressionVisitor(this),
                     node.right.acceptExpressionVisitor(this)
                 ]
-            };
+            });
         }
 
-        var result = {
+        var result = this.wrap(node, {
             type: node.op === '=' ? 'AssignmentExpression' : node.op === '&&' || node.op === '||' ? 'LogicalExpression' : 'BinaryExpression',
             operator: node.op,
             left: node.left.acceptExpressionVisitor(this),
             right: node.right.acceptExpressionVisitor(this)
-        };
+        });
 
         if (!OutputJS.INTEGER_OPS[node.op] && node.computedType.innerType === SpecialType.INT) {
-            result = this.wrapIntegerOperator(result);
+            result = this.wrapIntegerOperator(node, result);
         }
 
         return result;
     };
 
     OutputJS.prototype.visitTernaryExpression = function (node) {
-        return {
+        return this.wrap(node, {
             type: 'ConditionalExpression',
             test: node.value.acceptExpressionVisitor(this),
             consequent: node.trueValue.acceptExpressionVisitor(this),
             alternate: node.falseValue.acceptExpressionVisitor(this)
-        };
+        });
     };
 
     OutputJS.prototype.visitMemberExpression = function (node) {
         if (node.value.computedType.innerType === NativeTypes.MATH) {
             switch (node.id.name) {
                 case 'NAN':
-                    return {
+                    return this.wrap(node, {
                         type: 'Identifier',
                         name: 'NaN'
-                    };
+                    });
 
                 case 'INFINITY':
-                    return {
+                    return this.wrap(node, {
                         type: 'Identifier',
                         name: 'Infinity'
-                    };
+                    });
             }
         }
 
-        return {
+        return this.wrap(node, {
             type: 'MemberExpression',
             object: node.value.acceptExpressionVisitor(this),
             property: this.visitIdentifier(node.id)
-        };
+        });
     };
 
     OutputJS.prototype.visitIntExpression = function (node) {
-        return {
+        return this.wrap(node, {
             type: 'Literal',
             value: node.value
-        };
+        });
     };
 
     OutputJS.prototype.visitBoolExpression = function (node) {
-        return {
+        return this.wrap(node, {
             type: 'Literal',
             value: node.value
-        };
+        });
     };
 
     OutputJS.prototype.visitDoubleExpression = function (node) {
-        return {
+        return this.wrap(node, {
             type: 'Literal',
             value: node.value
-        };
+        });
     };
 
     OutputJS.prototype.visitNullExpression = function (node) {
-        return {
+        return this.wrap(node, {
             type: 'Literal',
             value: null
-        };
+        });
     };
 
     OutputJS.prototype.visitThisExpression = function (node) {
-        return {
+        return this.wrap(node, {
             type: 'ThisExpression'
-        };
+        });
     };
 
     OutputJS.prototype.visitCallExpression = function (node) {
@@ -3304,117 +3336,117 @@ var OutputJS = (function () {
                 switch (member.symbol) {
                     case NativeTypes.LIST_GET:
                         assert(node.args.length === 1);
-                        return {
+                        return this.wrap(node, {
                             type: 'MemberExpression',
                             object: member.value.acceptExpressionVisitor(this),
                             property: node.args[0].acceptExpressionVisitor(this),
                             computed: true
-                        };
+                        });
 
                     case NativeTypes.LIST_SET:
                         assert(node.args.length === 2);
-                        return {
+                        return this.wrap(node, {
                             type: 'AssignmentExpression',
                             operator: '=',
-                            left: {
+                            left: this.wrap(node, {
                                 type: 'MemberExpression',
                                 object: member.value.acceptExpressionVisitor(this),
                                 property: node.args[0].acceptExpressionVisitor(this),
                                 computed: true
-                            },
+                            }),
                             right: node.args[1].acceptExpressionVisitor(this)
-                        };
+                        });
 
                     case NativeTypes.LIST_PUSH:
                         assert(node.args.length === 1);
-                        return {
+                        return this.wrap(node, {
                             type: 'CallExpression',
-                            callee: {
+                            callee: this.wrap(node, {
                                 type: 'MemberExpression',
                                 object: member.value.acceptExpressionVisitor(this),
-                                property: { kind: 'Identifier', name: 'push' }
-                            },
+                                property: this.wrap(node, { type: 'Identifier', name: 'push' })
+                            }),
                             arguments: [node.args[0].acceptExpressionVisitor(this)]
-                        };
+                        });
 
                     case NativeTypes.LIST_POP:
                         assert(node.args.length === 0);
-                        return {
+                        return this.wrap(node, {
                             type: 'CallExpression',
-                            callee: {
+                            callee: this.wrap(node, {
                                 type: 'MemberExpression',
                                 object: member.value.acceptExpressionVisitor(this),
-                                property: { kind: 'Identifier', name: 'pop' }
-                            },
+                                property: this.wrap(node, { type: 'Identifier', name: 'pop' })
+                            }),
                             arguments: []
-                        };
+                        });
 
                     case NativeTypes.LIST_UNSHIFT:
                         assert(node.args.length === 1);
-                        return {
+                        return this.wrap(node, {
                             type: 'CallExpression',
-                            callee: {
+                            callee: this.wrap(node, {
                                 type: 'MemberExpression',
                                 object: member.value.acceptExpressionVisitor(this),
-                                property: { kind: 'Identifier', name: 'unshift' }
-                            },
+                                property: this.wrap(node, { type: 'Identifier', name: 'unshift' })
+                            }),
                             arguments: [node.args[0].acceptExpressionVisitor(this)]
-                        };
+                        });
 
                     case NativeTypes.LIST_SHIFT:
                         assert(node.args.length === 0);
-                        return {
+                        return this.wrap(node, {
                             type: 'CallExpression',
-                            callee: {
+                            callee: this.wrap(node, {
                                 type: 'MemberExpression',
                                 object: member.value.acceptExpressionVisitor(this),
-                                property: { kind: 'Identifier', name: 'shift' }
-                            },
+                                property: this.wrap(node, { type: 'Identifier', name: 'shift' })
+                            }),
                             arguments: []
-                        };
+                        });
 
                     case NativeTypes.LIST_INDEX_OF:
                         assert(node.args.length === 1);
-                        return {
+                        return this.wrap(node, {
                             type: 'CallExpression',
-                            callee: {
+                            callee: this.wrap(node, {
                                 type: 'MemberExpression',
                                 object: member.value.acceptExpressionVisitor(this),
-                                property: { kind: 'Identifier', name: 'indexOf' }
-                            },
+                                property: this.wrap(node, { type: 'Identifier', name: 'indexOf' })
+                            }),
                             arguments: [node.args[0].acceptExpressionVisitor(this)]
-                        };
+                        });
 
                     case NativeTypes.LIST_INSERT:
                         assert(node.args.length === 2);
-                        return {
+                        return this.wrap(node, {
                             type: 'CallExpression',
-                            callee: {
+                            callee: this.wrap(node, {
                                 type: 'MemberExpression',
                                 object: member.value.acceptExpressionVisitor(this),
-                                property: { kind: 'Identifier', name: 'splice' }
-                            },
+                                property: this.wrap(node, { type: 'Identifier', name: 'splice' })
+                            }),
                             arguments: [
                                 node.args[0].acceptExpressionVisitor(this),
-                                { type: 'Literal', value: 0 },
+                                this.wrap(node, { type: 'Literal', value: 0 }),
                                 node.args[1].acceptExpressionVisitor(this)
                             ]
-                        };
+                        });
 
                     case NativeTypes.LIST_REMOVE:
                         assert(node.args.length === 1);
-                        return {
+                        return this.wrap(node, {
                             type: 'CallExpression',
-                            callee: {
+                            callee: this.wrap(node, {
                                 type: 'MemberExpression',
                                 object: member.value.acceptExpressionVisitor(this),
-                                property: { kind: 'Identifier', name: 'splice' }
-                            },
+                                property: this.wrap(node, { type: 'Identifier', name: 'splice' })
+                            }),
                             arguments: [
                                 node.args[0].acceptExpressionVisitor(this),
-                                { type: 'Literal', value: 1 }
+                                this.wrap(node, { type: 'Literal', value: 1 })
                             ]
-                        };
+                        });
 
                     default:
                         assert(false);
@@ -3422,32 +3454,32 @@ var OutputJS = (function () {
             }
         }
 
-        return {
+        return this.wrap(node, {
             type: 'CallExpression',
             callee: node.value.acceptExpressionVisitor(this),
             arguments: node.args.map(function (n) {
                 return n.acceptExpressionVisitor(_this);
             })
-        };
+        });
     };
 
     OutputJS.prototype.visitNewExpression = function (node) {
         var _this = this;
         if (node.type.computedType.innerType === NativeTypes.LIST) {
             assert(node.args.length === 0);
-            return {
+            return this.wrap(node, {
                 type: 'ArrayExpression',
                 elements: []
-            };
+            });
         }
 
-        return {
+        return this.wrap(node, {
             type: 'NewExpression',
             callee: node.type.acceptExpressionVisitor(this),
             arguments: node.args.map(function (n) {
                 return n.acceptExpressionVisitor(_this);
             })
-        };
+        });
     };
 
     OutputJS.prototype.visitTypeModifierExpression = function (node) {
@@ -4523,16 +4555,21 @@ function cli() {
         compiler.compile();
 
         if (compiler.log.errorCount === 0) {
-            if (outputJS !== null)
-                fs.writeFileSync(outputJS, OutputJS.generate(compiler.module) + '\n');
+            if (outputJS !== null) {
+                var codeAndMap = OutputJS.generateWithSourceMap(compiler.module);
+                fs.writeFileSync(outputJS, codeAndMap.code + '\n//# sourceMappingURL=' + path.basename(outputJS) + '.map\n');
+                fs.writeFileSync(outputJS + '.map', codeAndMap.map + '\n');
+            }
             if (outputCPP !== null)
                 fs.writeFileSync(outputCPP, OutputCPP.generate(compiler.module) + '\n');
             console.log(gray(time() + 'build successful'));
             return true;
         }
 
-        if (outputJS !== null && fs.existsSync(outputJS))
+        if (outputJS !== null && fs.existsSync(outputJS)) {
             fs.unlinkSync(outputJS);
+            fs.unlinkSync(outputJS + '.map');
+        }
         if (outputCPP !== null && fs.existsSync(outputCPP))
             fs.unlinkSync(outputCPP);
         if (watchFlag)
@@ -4666,7 +4703,7 @@ if (typeof exports !== 'undefined') {
     exports.OutputCPP = OutputCPP;
 }
 
-if (require.main === module) {
+if (typeof require !== 'undefined' && typeof module !== 'undefined' && require.main === module) {
     cli();
 }
 //# sourceMappingURL=compiled.js.map

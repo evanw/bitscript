@@ -86,6 +86,7 @@ body {
     <script src="../node_modules/cppcodegen/cppcodegen.js"></script>
     <script src="../node_modules/esprima/esprima.js"></script>
     <script src="escodegen.browser.js"></script>
+    <script src="source-map.min.js"></script>
     <script src="codemirror.js"></script>
     <script src="../compiled.js"></script>
     <script>
@@ -292,10 +293,12 @@ function recompile() {
     // that would otherwise be blank and blank out the rest of the pannels
     var blankPannels = [];
     if (compiler.log.errorCount === 0) {
-      panelNamed('JavaScript').setTextIfVisible(function() { return OutputJS.generate(compiler.module) + '\n'; });
+      var codeAndMap = panelNamed('Source Map').isVisible ? OutputJS.generateWithSourceMap(compiler.module, 'compiled.js') : null;
+      panelNamed('JavaScript').setTextIfVisible(function() { return (codeAndMap !== null ? codeAndMap.code : OutputJS.generate(compiler.module)) + '\n'; });
       panelNamed('C++11').setTextIfVisible(function() { return OutputCPP.generate(compiler.module) + '\n'; });
+      panelNamed('Source Map').setTextIfVisible(function() { return codeAndMap.map + '\n'; });
     } else {
-      blankPannels.push(panelNamed('JavaScript'), panelNamed('C++11'));
+      blankPannels.push(panelNamed('JavaScript'), panelNamed('C++11'), panelNamed('Source Map'));
     }
     if (compiler.module !== null) {
       panelNamed('AST').setTextIfVisible(function() { return JSON.stringify(compiler.module, filter, 2); });
@@ -341,7 +344,8 @@ var panels = [
   new Panel({ name: 'JavaScript', readOnly: true }),
   new Panel({ name: 'C++11', readOnly: true }),
   new Panel({ name: 'AST', readOnly: true }),
-  new Panel({ name: 'Tokens', readOnly: true })
+  new Panel({ name: 'Tokens', readOnly: true }),
+  new Panel({ name: 'Source Map', readOnly: true })
 ];
 
 panelNamed('BitScript').editor.on('change', changed);
