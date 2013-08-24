@@ -651,6 +651,16 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
   }
 
   visitBinaryExpression(node: BinaryExpression): Object {
+    // Always do pointer comparisons with raw pointers
+    if (node.op === '==' || node.op === '!=') {
+      return {
+        kind: 'BinaryExpression',
+        operator: node.op,
+        left: this.insertImplicitConversion(node.left, node.left.computedType.wrapWithout(TypeModifier.OWNED | TypeModifier.SHARED)),
+        right: this.insertImplicitConversion(node.right, node.right.computedType.wrapWithout(TypeModifier.OWNED | TypeModifier.SHARED))
+      };
+    }
+
     return {
       kind: node.op === '=' ? 'AssignmentExpression' : 'BinaryExpression',
       operator: node.op,

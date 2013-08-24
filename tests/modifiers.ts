@@ -246,3 +246,13 @@ test([
   '  baz(foo.x, foo);',
   '             ~~~',
 ]);
+
+test([
+  'class Foo {',
+  '}',
+  'bool foo(owned Foo foo, shared Foo bar, Foo baz) {',
+  '  // This should compile in C++ by implicitly converting to raw pointers before each comparison',
+  '  return foo == foo || bar == bar || baz == baz || foo == bar || foo == baz || bar == baz;',
+  '}',
+], [
+]);
