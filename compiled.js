@@ -2881,7 +2881,7 @@ var OutputJS = (function () {
         });
     };
 
-    OutputJS.generateWithSourceMap = function (node) {
+    OutputJS.generateWithSourceMap = function (node, root) {
         return escodegen.generate(new OutputJS(function (node, result) {
             if (node.range !== null) {
                 var start = node.range.start;
@@ -2902,6 +2902,7 @@ var OutputJS = (function () {
             return result;
         }).visitModule(node), {
             sourceMap: true,
+            sourceMapRoot: root,
             sourceMapWithCode: true,
             format: { indent: { style: '  ' } }
         });
@@ -3509,6 +3510,7 @@ var OutputCPP = (function () {
         this.needMemoryHeader = false;
         this.needVectorHeader = false;
         this.needMathHeader = false;
+        this.needStdlibHeader = false;
         this.needMathRandom = false;
         this.needAlgorithmHeader = false;
         this.needListPop = false;
@@ -4067,6 +4069,12 @@ var OutputCPP = (function () {
                 text: '<math.h>'
             });
         }
+        if (this.needStdlibHeader) {
+            result.body.unshift({
+                kind: 'IncludeStatement',
+                text: '<stdlib.h>'
+            });
+        }
         if (this.needVectorHeader) {
             result.body.unshift({
                 kind: 'IncludeStatement',
@@ -4275,7 +4283,7 @@ var OutputCPP = (function () {
                     };
 
                 case 'random':
-                    this.needMathHeader = true;
+                    this.needStdlibHeader = true;
                     this.needMathRandom = true;
                     return {
                         kind: 'Identifier',
@@ -4565,7 +4573,8 @@ function cli() {
 
         if (compiler.log.errorCount === 0) {
             if (outputJS !== null) {
-                var codeAndMap = OutputJS.generateWithSourceMap(compiler.module);
+                var root = path.relative(path.dirname(outputJS), '.');
+                var codeAndMap = OutputJS.generateWithSourceMap(compiler.module, root);
                 fs.writeFileSync(outputJS, codeAndMap.code + '\n//# sourceMappingURL=' + path.basename(outputJS) + '.map\n');
                 fs.writeFileSync(outputJS + '.map', codeAndMap.map + '\n');
             }
