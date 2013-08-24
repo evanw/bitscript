@@ -6,6 +6,7 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
   needMemoryHeader: boolean = false;
   needVectorHeader: boolean = false;
   needMathHeader: boolean = false;
+  needStdlibHeader: boolean = false;
   needMathRandom: boolean = false;
   needAlgorithmHeader: boolean = false;
   needListPop: boolean = false;
@@ -520,6 +521,12 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
         text: '<math.h>'
       });
     }
+    if (this.needStdlibHeader) {
+      result.body.unshift({
+        kind: 'IncludeStatement',
+        text: '<stdlib.h>'
+      });
+    }
     if (this.needVectorHeader) {
       result.body.unshift({
         kind: 'IncludeStatement',
@@ -721,7 +728,7 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
           };
 
         case 'random':
-          this.needMathHeader = true;
+          this.needStdlibHeader = true;
           this.needMathRandom = true;
           return {
             kind: 'Identifier',

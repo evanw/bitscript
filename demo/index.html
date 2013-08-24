@@ -293,7 +293,7 @@ function recompile() {
     // that would otherwise be blank and blank out the rest of the pannels
     var blankPannels = [];
     if (compiler.log.errorCount === 0) {
-      var codeAndMap = panelNamed('Source Map').isVisible ? OutputJS.generateWithSourceMap(compiler.module, 'compiled.js') : null;
+      var codeAndMap = panelNamed('Source Map').isVisible ? OutputJS.generateWithSourceMap(compiler.module, '.') : null;
       panelNamed('JavaScript').setTextIfVisible(function() { return (codeAndMap !== null ? codeAndMap.code : OutputJS.generate(compiler.module)) + '\n'; });
       panelNamed('C++11').setTextIfVisible(function() { return OutputCPP.generate(compiler.module) + '\n'; });
       panelNamed('Source Map').setTextIfVisible(function() { return codeAndMap.map + '\n'; });
