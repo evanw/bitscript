@@ -667,6 +667,7 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
       this.checkImplicitCast(left, node.right);
       this.checkRValueToRawPointer(left, node.right);
       this.checkStorage(node.left);
+      node.computedType = left;
       return;
     }
 

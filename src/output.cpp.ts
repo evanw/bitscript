@@ -19,7 +19,11 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
 
   static generate(node: Module): string {
     var output: OutputCPP = new OutputCPP();
-    var result: string = cppcodegen.generate(output.visitModule(node), { indent: '  ', cpp11: true }).trim();
+    var result: string = cppcodegen.generate(output.visitModule(node), {
+      indent: '  ',
+      cpp11: true,
+      parenthesizeAndInsideOr: true
+    }).trim();
 
     // Cheat for now since I don't feel like writing tons of JSON
     var listStuff: string = '';
