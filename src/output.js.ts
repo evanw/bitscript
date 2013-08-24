@@ -31,7 +31,7 @@ class OutputJS implements StatementVisitor<Object>, DeclarationVisitor<Object>, 
       body: flatten([
         flatten(node.sortedObjectDeclarations().map(n => this.generateObjectDeclaration(n))),
         node.block.statements.filter(n => n instanceof VariableDeclaration).map(n => n.acceptStatementVisitor(this)),
-        node.block.statements.filter(n => n instanceof FunctionDeclaration).map(n => n.acceptStatementVisitor(this)),
+        node.block.statements.filter(n => n instanceof FunctionDeclaration && n.block !== null).map(n => n.acceptStatementVisitor(this)),
       ])
     };
 

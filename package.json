@@ -1,5 +1,6 @@
 {
   "name": "bitscript",
+  "description": "An experimental language that compiles to JavaScript and C++",
   "version": "0.1.0",
   "bin": {
     "bitc": "./bitc"
