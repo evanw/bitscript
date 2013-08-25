@@ -133,7 +133,9 @@ var example = [
   '  void setup() {',
   '    owned Player p = new Player(this);',
   '    player = p;',
-  '    entities.push(p);',
+  '',
+  '    // Move expressions make ownership transfer explicit',
+  '    entities.push(move p);',
   '  }',
   '',
   '  bool isOnGround(Entity entity) {',
@@ -150,7 +152,7 @@ var example = [
   '  owned Player player = new Player(world);',
   '  player.y = 10;',
   '  int index = world.entities.indexOf(world.player);',
-  '  world.entities.set(index, player);',
+  '  world.entities.set(index, move player);',
   '',
   '  // All allocated objects will automatically be deleted',
   '  return 0;',
@@ -172,7 +174,7 @@ CodeMirror.defineMode('custom', function(config, parserConfig) {
     indent: function(state, textAfter) {
       var lastChar = textAfter.slice(-1);
       var shouldIndent = state.lastChar === '{';
-      var shouldDedent = lastChar === '}';
+      var shouldDedent = lastChar === '}' && textAfter.indexOf('{') === -1;
       if (shouldIndent && shouldDedent) return state.indentation;
       if (shouldDedent) return state.indentation - 2;
       if (shouldIndent) return state.indentation + 2;
@@ -306,7 +308,7 @@ function recompile() {
       blankPannels.push(panelNamed('AST'));
     }
     if (compiler.log.errorCount > 0) {
-      showTextInFirstVisiblePannel(blankPannels, compiler.log.diagnostics.join('\n\n'));
+      showTextInFirstVisiblePannel(blankPannels, compiler.log.diagnostics.join('\n\n') + '\n');
     }
   } catch (e) {
     showTextInFirstVisiblePannel(panels, (e.stack || e) + '');

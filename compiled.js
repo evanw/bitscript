@@ -232,8 +232,16 @@ function semanticErrorBadParameter(log, range, type) {
     log.error(range, 'cannot use ' + type + ' as a type parameter');
 }
 
-function semanticErrorReleaseAndUse(log, range, symbol) {
-    log.error(range, symbol.name + ' is both released and used in the same expression');
+function semanticErrorMoveAndUse(log, range, symbol) {
+    log.error(range, symbol.name + ' is both moved and used in the same expression');
+}
+
+function semanticErrorBadMove(log, range, type) {
+    log.error(range, 'cannot move ' + type);
+}
+
+function semanticErrorExpectedMove(log, range, type) {
+    log.error(range, 'cannot move ' + type + ' without a move expression');
 }
 var Token = (function () {
     function Token(range, kind, text) {
@@ -308,6 +316,7 @@ function tokenize(log, source) {
         'null',
         'new',
         'this',
+        'move',
         'owned',
         'shared',
         'over'
@@ -1058,6 +1067,22 @@ var SymbolExpression = (function (_super) {
     return SymbolExpression;
 })(Expression);
 
+// A move expression is the only way to convert from an owned L-value.
+// Originally you could transfer ownership with a simple assignment, but
+// that led to too many dangling pointer mistakes. This way, ownership
+// transfers are explicit and easy to see when reading your code.
+var MoveExpression = (function (_super) {
+    __extends(MoveExpression, _super);
+    function MoveExpression(range, value) {
+        _super.call(this, range);
+        this.value = value;
+    }
+    MoveExpression.prototype.acceptExpressionVisitor = function (visitor) {
+        return visitor.visitMoveExpression(this);
+    };
+    return MoveExpression;
+})(Expression);
+
 var UnaryExpression = (function (_super) {
     __extends(UnaryExpression, _super);
     function UnaryExpression(range, op, value) {
@@ -1714,6 +1739,9 @@ pratt.prefix('+', Power.UNARY, buildUnaryPrefix);
 pratt.prefix('-', Power.UNARY, buildUnaryPrefix);
 pratt.prefix('!', Power.UNARY, buildUnaryPrefix);
 pratt.prefix('~', Power.UNARY, buildUnaryPrefix);
+pratt.prefix('move', Power.UNARY, function (context, token, node) {
+    return new MoveExpression(spanRange(token.range, node.range), node);
+});
 
 // Binary expressions
 pratt.infix(',', Power.COMMA, buildBinary);
@@ -2147,11 +2175,11 @@ var Initializer = (function () {
     return Initializer;
 })();
 
-var IsOwnedPointerRelease;
-(function (IsOwnedPointerRelease) {
-    IsOwnedPointerRelease[IsOwnedPointerRelease["NO"] = 0] = "NO";
-    IsOwnedPointerRelease[IsOwnedPointerRelease["YES"] = 1] = "YES";
-})(IsOwnedPointerRelease || (IsOwnedPointerRelease = {}));
+var IsPointerMove;
+(function (IsPointerMove) {
+    IsPointerMove[IsPointerMove["NO"] = 0] = "NO";
+    IsPointerMove[IsPointerMove["YES"] = 1] = "YES";
+})(IsPointerMove || (IsPointerMove = {}));
 
 var Resolver = (function () {
     function Resolver(log) {
@@ -2165,7 +2193,7 @@ var Resolver = (function () {
         // unspecified order of operations in C++ and because it's likely a bug. This
         // tracks all symbol expressions that have been released (std::move() in C++)
         // and is cleared at the start of each statement.
-        this.symbolReleaseMap = [];
+        this.movedSymbolMap = [];
     }
     Resolver.resolve = function (log, module) {
         new Resolver(log).visitBlock(module.block);
@@ -2274,46 +2302,53 @@ var Resolver = (function () {
         }
     };
 
-    Resolver.prototype.checkSymbolExpression = function (node, isOwnedPointerRelease) {
+    Resolver.prototype.checkSymbolExpression = function (node, isPointerMove) {
         if (node.symbol === null || !node.symbol.type.isOwned()) {
             return;
         }
 
         // Find the existing entry
         var existingEntry = null;
-        for (var i = 0; i < this.symbolReleaseMap.length; i++) {
-            var entry = this.symbolReleaseMap[i];
+        for (var i = 0; i < this.movedSymbolMap.length; i++) {
+            var entry = this.movedSymbolMap[i];
             if (entry.symbol === node.symbol) {
                 existingEntry = entry;
                 break;
             }
         }
 
-        if (existingEntry !== null && (isOwnedPointerRelease || existingEntry.isReleased)) {
-            semanticErrorReleaseAndUse(this.log, node.range, node.symbol);
+        if (existingEntry !== null && !existingEntry.reportedError && (isPointerMove || existingEntry.isMoved)) {
+            semanticErrorMoveAndUse(this.log, node.range, node.symbol);
+            existingEntry.reportedError = true;
         }
 
         if (existingEntry === null) {
-            existingEntry = { symbol: node.symbol, isReleased: false, node: node };
-            this.symbolReleaseMap.push(existingEntry);
+            existingEntry = { symbol: node.symbol, isMoved: false, node: node, reportedError: false };
+            this.movedSymbolMap.push(existingEntry);
         }
 
-        if (isOwnedPointerRelease) {
-            existingEntry.isReleased = true;
+        if (isPointerMove) {
+            existingEntry.isMoved = true;
         }
     };
 
     Resolver.prototype.checkImplicitCast = function (type, node) {
-        if (!type.isError() && !node.computedType.isError()) {
-            if (!TypeLogic.canImplicitlyConvert(node.computedType, type)) {
-                semanticErrorIncompatibleTypes(this.log, node.range, node.computedType, type);
-                return;
-            }
+        if (type.isError() || node.computedType.isError()) {
+            return;
+        }
+
+        if (!TypeLogic.canImplicitlyConvert(node.computedType, type)) {
+            semanticErrorIncompatibleTypes(this.log, node.range, node.computedType, type);
+            return;
+        }
+
+        if (type.isOwned() && node.computedType.isOwned() && node.computedType.isStorage()) {
+            semanticErrorExpectedMove(this.log, node.range, node.computedType);
+            return;
         }
 
         if (node instanceof SymbolExpression) {
-            var n = node;
-            this.checkSymbolExpression(n, n.symbol !== null && n.symbol.type.isOwned() && type.isOwned() ? IsOwnedPointerRelease.YES : IsOwnedPointerRelease.NO);
+            this.checkSymbolExpression(node, IsPointerMove.NO);
         }
     };
 
@@ -2440,7 +2475,7 @@ var Resolver = (function () {
         this.pushContext(this.context.cloneWithScope(node.scope));
         this.initializeBlock(node);
         node.statements.forEach(function (n) {
-            _this.symbolReleaseMap = [];
+            _this.movedSymbolMap = [];
             n.acceptStatementVisitor(_this);
         });
         this.popContext();
@@ -2601,6 +2636,27 @@ var Resolver = (function () {
         }
 
         node.computedType = node.symbol.type;
+    };
+
+    Resolver.prototype.visitMoveExpression = function (node) {
+        this.resolveAsExpression(node.value);
+
+        // Avoid reporting further errors
+        var value = node.value.computedType;
+        if (value.isError()) {
+            return;
+        }
+
+        if (!value.isOwned() || !value.isStorage()) {
+            semanticErrorBadMove(this.log, node.range, value);
+            return;
+        }
+
+        if (node.value instanceof SymbolExpression) {
+            this.checkSymbolExpression(node.value, IsPointerMove.YES);
+        }
+
+        node.computedType = value.wrapWithout(TypeModifier.STORAGE);
     };
 
     Resolver.prototype.visitUnaryExpression = function (node) {
@@ -2765,7 +2821,7 @@ var Resolver = (function () {
         }
 
         if (node.value instanceof SymbolExpression) {
-            this.checkSymbolExpression(node.value, IsOwnedPointerRelease.NO);
+            this.checkSymbolExpression(node.value, IsPointerMove.NO);
         }
 
         // Substitute the type parameters from the object into the member
@@ -3305,6 +3361,10 @@ var OutputJS = (function () {
                 value: 0
             })
         });
+    };
+
+    OutputJS.prototype.visitMoveExpression = function (node) {
+        return node.value.acceptExpressionVisitor(this);
     };
 
     OutputJS.prototype.visitUnaryExpression = function (node) {
@@ -3994,18 +4054,6 @@ var OutputCPP = (function () {
 
     OutputCPP.prototype.insertImplicitConversion = function (from, to) {
         var _this = this;
-        if (from.computedType.isOwned() && to.isOwned() && from.computedType.isStorage()) {
-            return {
-                kind: 'CallExpression',
-                callee: {
-                    kind: 'MemberType',
-                    inner: { kind: 'Identifier', name: 'std' },
-                    member: { kind: 'Identifier', name: 'move' }
-                },
-                arguments: [from.acceptExpressionVisitor(this)]
-            };
-        }
-
         if (from.computedType.isOwned() && to.isShared()) {
             if (from instanceof NewExpression) {
                 var node = from;
@@ -4311,6 +4359,18 @@ var OutputCPP = (function () {
         return {
             kind: 'Identifier',
             name: node.name
+        };
+    };
+
+    OutputCPP.prototype.visitMoveExpression = function (node) {
+        return {
+            kind: 'CallExpression',
+            callee: {
+                kind: 'MemberType',
+                inner: { kind: 'Identifier', name: 'std' },
+                member: { kind: 'Identifier', name: 'move' }
+            },
+            arguments: [node.value.acceptExpressionVisitor(this)]
         };
     };
 
