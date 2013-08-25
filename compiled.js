@@ -709,7 +709,9 @@ var Scope = (function () {
         this.symbols = [];
     }
     Scope.prototype.containsAbstractSymbols = function () {
+        console.log('containsAbstractSymbols: ' + this.symbols.length);
         for (var i = 0; i < this.symbols.length; i++) {
+            console.log('- ' + this.symbols[i].name + ' is ' + this.symbols[i].isAbstract);
             if (this.symbols[i].isAbstract)
                 return true;
         }
@@ -1994,6 +1996,8 @@ var Initializer = (function () {
     }
     Initializer.prototype.visitObjectDeclaration = function (node) {
         var _this = this;
+        console.log('Initializer.visitObjectDeclaration', node.id.name);
+
         // Check modifiers
         this.resolver.ignoreModifier(node, SymbolModifier.OVER, 'on a class declaration');
 
@@ -2023,6 +2027,9 @@ var Initializer = (function () {
             // Mix the symbols from the base scope in with this block's symbols
             // to make detecting abstract vs fully implemented types easier
             node.block.scope.symbols = type.baseType.scope.symbols.slice(0);
+            console.log('initializing class ' + node.id.name + ' with ' + node.block.scope.symbols.map(function (s) {
+                return s.name;
+            }).join(', '));
         }
 
         // Populate the block scope
@@ -2039,14 +2046,19 @@ var Initializer = (function () {
 
         // Lazily compute the constructor type and abstract flag, see ObjectType for details
         type.lazyInitializer = function () {
+            node.block.scope.symbols.forEach(function (s) {
+                return _this.resolver.ensureDeclarationIsInitialized(s.node);
+            });
+            console.log('eval lazy initializer for ' + node.id.name);
             var baseArgTypes = type.baseType !== null ? type.baseType.constructorType().args : [];
             var argTypes = node.block.statements.filter(function (n) {
                 return n instanceof VariableDeclaration && (n).value === null;
             }).map(function (n) {
-                return (_this.resolver.ensureDeclarationIsInitialized(n), (n).symbol.type);
+                return (n).symbol.type;
             });
             type._isAbstract = node.block.scope.containsAbstractSymbols();
             type._constructorType = new FunctionType(null, baseArgTypes.concat(argTypes));
+            console.log('_isAbstract = ' + type._isAbstract);
         };
 
         return type.wrap(0);
@@ -2054,10 +2066,12 @@ var Initializer = (function () {
 
     Initializer.prototype.visitFunctionDeclaration = function (node) {
         var _this = this;
+        console.log('Initializer.visitFunctionDeclaration', node.id.name);
         this.resolver.resolveAsParameterizedType(node.result);
 
         // Determine whether the function is abstract
         node.symbol.isAbstract = node.block === null;
+        console.log(node.symbol.name + '.isAbstract is ' + node.symbol.isAbstract, node.block);
 
         // Create the function scope
         node.scope = new Scope(this.resolver.context.scope);
@@ -2078,6 +2092,8 @@ var Initializer = (function () {
     };
 
     Initializer.prototype.visitVariableDeclaration = function (node) {
+        console.log('Initializer.visitVariableDeclaration', node.id.name);
+
         // Check modifiers
         this.resolver.ignoreModifier(node, SymbolModifier.OVER, 'on a variable declaration');
 
@@ -2283,6 +2299,8 @@ var Resolver = (function () {
     };
 
     Resolver.prototype.ensureDeclarationIsInitialized = function (node) {
+        console.log('ensureDeclarationIsInitialized', node.id.name);
+
         // Only initialize once (symbol should be set by block initialization)
         assert(node.symbol !== null);
         if (node.symbol.type !== null) {
@@ -2757,6 +2775,8 @@ var Resolver = (function () {
             return;
         }
 
+        // Cannot construct an abstract class
+        console.log('checking for abstract new');
         if (objectType.isAbstract()) {
             semanticErrorAbstractNew(this.log, node.type);
             return;
