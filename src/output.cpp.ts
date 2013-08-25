@@ -586,6 +586,16 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
     };
   }
 
+  visitForStatement(node: ForStatement): Object {
+    return {
+      kind: 'ForStatement',
+      init: node.setup !== null ? node.setup.acceptExpressionVisitor(this) : null,
+      test: node.test !== null ? node.test.acceptExpressionVisitor(this) : null,
+      update: node.update !== null ? node.update.acceptExpressionVisitor(this) : null,
+      body: this.visitBlock(node.block)
+    };
+  }
+
   visitReturnStatement(node: ReturnStatement): Object {
     return {
       kind: 'ReturnStatement',

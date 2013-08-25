@@ -33,7 +33,7 @@ class Scope {
     public lexicalParent: Scope) {
   }
 
-  // Return true for continue, false for break
+  // Return value determines continue vs break
   forEachSymbol(callback: (symbol: Symbol) => ForEachSymbol) {
     for (var name in this.symbols) {
       if (name[0] === ' ' && callback(this.symbols[name]) === ForEachSymbol.BREAK) {

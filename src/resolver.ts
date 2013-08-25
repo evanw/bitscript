@@ -534,6 +534,27 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
     this.popContext();
   }
 
+  visitForStatement(node: ForStatement) {
+    if (!this.context.inFunction()) {
+      semanticErrorUnexpectedStatement(this.log, node.range, 'for statement');
+      return;
+    }
+
+    if (node.setup !== null) {
+      this.resolveAsExpression(node.setup);
+    }
+    if (node.test !== null) {
+      this.resolveAsExpression(node.test);
+      this.checkImplicitCast(SpecialType.BOOL.wrap(TypeModifier.INSTANCE), node.test);
+    }
+    if (node.update !== null) {
+      this.resolveAsExpression(node.update);
+    }
+    this.pushContext(this.context.cloneForLoop());
+    this.visitBlock(node.block);
+    this.popContext();
+  }
+
   visitReturnStatement(node: ReturnStatement) {
     if (!this.context.inFunction()) {
       semanticErrorUnexpectedStatement(this.log, node.range, 'return statement');

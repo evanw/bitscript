@@ -55,7 +55,7 @@ function cli() {
       if (outputJS !== null) {
         var root: string = path.relative(path.dirname(outputJS), '.');
         var codeAndMap: { code: string; map: string } = OutputJS.generateWithSourceMap(compiler.module, root);
-        fs.writeFileSync(outputJS, codeAndMap.code + '\n//# sourceMappingURL=' + path.basename(outputJS) + '.map\n');
+        fs.writeFileSync(outputJS, codeAndMap.code + '\n/' + /* Break this up to make Chrome ignore it */ '/# sourceMappingURL=' + path.basename(outputJS) + '.map\n');
         fs.writeFileSync(outputJS + '.map', codeAndMap.map + '\n');
       }
       if (outputCPP !== null) fs.writeFileSync(outputCPP, OutputCPP.generate(compiler.module) + '\n');

@@ -138,6 +138,16 @@ class OutputJS implements StatementVisitor<Object>, DeclarationVisitor<Object>, 
     });
   }
 
+  visitForStatement(node: ForStatement): Object {
+    return this.wrap(node, {
+      type: 'ForStatement',
+      init: node.setup !== null ? node.setup.acceptExpressionVisitor(this) : null,
+      test: node.test !== null ? node.test.acceptExpressionVisitor(this) : null,
+      update: node.update !== null ? node.update.acceptExpressionVisitor(this) : null,
+      body: this.visitBlock(node.block)
+    });
+  }
+
   visitReturnStatement(node: ReturnStatement): Object {
     return this.wrap(node, {
       type: 'ReturnStatement',
@@ -318,6 +328,11 @@ class OutputJS implements StatementVisitor<Object>, DeclarationVisitor<Object>, 
     '^': true,
     '<<': true,
     '>>': true,
+
+    // This is an integer operator because we force every value to be an integer
+    // before we assign it to the symbol, so assignment expressions will always
+    // result in an integer
+    '=': true,
   };
 
   wrapIntegerOperator(node: AST, result: any): any {

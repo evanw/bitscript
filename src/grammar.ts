@@ -20,7 +20,6 @@ enum Power {
 }
 
 function parseGroup(context: ParserContext): Expression {
-  var token: Token = context.current();
   if (!context.expect('(')) return null;
   var value: Expression = pratt.parse(context, Power.LOWEST); if (value === null) return null;
   if (!context.expect(')')) return null;
@@ -163,6 +162,28 @@ function parseStatement(context: ParserContext): Statement {
     var value: Expression = parseGroup(context); if (value === null) return null;
     var block: Block = parseBlockOrStatement(context); if (block === null) return null;
     return new WhileStatement(context.spanSince(range), value, block);
+  }
+
+  // For statement
+  if (context.eat('for')) {
+    if (!context.expect('(')) return null;
+    var setup: Expression = null;
+    var test: Expression = null;
+    var update: Expression = null;
+    if (!context.peek(';')) {
+      setup = pratt.parse(context, Power.LOWEST); if (setup === null) return null;
+    }
+    if (!context.expect(';')) return null;
+    if (!context.peek(';')) {
+      test = pratt.parse(context, Power.LOWEST); if (test === null) return null;
+    }
+    if (!context.expect(';')) return null;
+    if (!context.peek(')')) {
+      update = pratt.parse(context, Power.LOWEST); if (update === null) return null;
+    }
+    if (!context.expect(')')) return null;
+    var block: Block = parseBlockOrStatement(context); if (block === null) return null;
+    return new ForStatement(context.spanSince(range), setup, test, update, block);
   }
 
   // Return statement

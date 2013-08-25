@@ -172,7 +172,7 @@ CodeMirror.defineMode('custom', function(config, parserConfig) {
     indent: function(state, textAfter) {
       var lastChar = textAfter.slice(-1);
       var shouldIndent = state.lastChar === '{';
-      var shouldDedent = lastChar === '}';
+      var shouldDedent = lastChar === '}' && textAfter.indexOf('{') === -1;
       if (shouldIndent && shouldDedent) return state.indentation;
       if (shouldDedent) return state.indentation - 2;
       if (shouldIndent) return state.indentation + 2;

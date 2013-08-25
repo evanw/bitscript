@@ -62,6 +62,7 @@ interface StatementVisitor<T> {
   visitExpressionStatement(node: ExpressionStatement): T;
   visitIfStatement(node: IfStatement): T;
   visitWhileStatement(node: WhileStatement): T;
+  visitForStatement(node: ForStatement): T;
   visitReturnStatement(node: ReturnStatement): T;
   visitBreakStatement(node: BreakStatement): T;
   visitContinueStatement(node: ContinueStatement): T;
@@ -111,6 +112,21 @@ class WhileStatement extends Statement {
 
   acceptStatementVisitor<T>(visitor: StatementVisitor<T>): T {
     return visitor.visitWhileStatement(this);
+  }
+}
+
+class ForStatement extends Statement {
+  constructor(
+    range: SourceRange,
+    public setup: Expression,
+    public test: Expression,
+    public update: Expression,
+    public block: Block) {
+    super(range);
+  }
+
+  acceptStatementVisitor<T>(visitor: StatementVisitor<T>): T {
+    return visitor.visitForStatement(this);
   }
 }
 
