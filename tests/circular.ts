@@ -64,3 +64,26 @@ test([
   '}',
 ], [
 ]);
+
+test([
+  'class Bar : Foo {}',
+  'void foo() {',
+  '  new Bar(); // This should be detected as abstract',
+  '}',
+  'class Foo {',
+  '  void bar();',
+  '}',
+  'void baz() {',
+  '  new Bar(); // This should be detected as abstract',
+  '}',
+], [
+  'error on line 3 of <stdin>: cannot use new on abstract type Bar',
+  '',
+  '  new Bar(); // This should be detected as abstract',
+  '      ~~~',
+  '',
+  'error on line 9 of <stdin>: cannot use new on abstract type Bar',
+  '',
+  '  new Bar(); // This should be detected as abstract',
+  '      ~~~',
+]);

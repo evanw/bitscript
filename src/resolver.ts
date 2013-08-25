@@ -104,10 +104,11 @@ class Initializer implements DeclarationVisitor<WrappedType> {
 
     // Lazily compute the constructor type and abstract flag, see ObjectType for details
     type.lazyInitializer = () => {
+      node.block.scope.symbols.forEach(s => this.resolver.ensureDeclarationIsInitialized(s.node));
       var baseArgTypes: WrappedType[] = type.baseType !== null ? type.baseType.constructorType().args : [];
       var argTypes: WrappedType[] = node.block.statements
         .filter(n => n instanceof VariableDeclaration && (<VariableDeclaration>n).value === null)
-        .map(n => (this.resolver.ensureDeclarationIsInitialized(n), (<VariableDeclaration>n).symbol.type));
+        .map(n => (<VariableDeclaration>n).symbol.type);
       type._isAbstract = node.block.scope.containsAbstractSymbols();
       type._constructorType = new FunctionType(null, baseArgTypes.concat(argTypes));
     };

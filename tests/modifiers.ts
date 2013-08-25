@@ -256,3 +256,14 @@ test([
   '}',
 ], [
 ]);
+
+test([
+  'class Foo {}',
+  'int main() {',
+  '  owned Foo foo;',
+  '  Foo bar;',
+  '  bar = foo = new Foo(); // This should compile correctly in C++',
+  '  return 0;',
+  '}',
+], [
+]);
