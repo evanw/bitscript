@@ -308,7 +308,7 @@ function recompile() {
       blankPannels.push(panelNamed('AST'));
     }
     if (compiler.log.errorCount > 0) {
-      showTextInFirstVisiblePannel(blankPannels, compiler.log.diagnostics.join('\n\n'));
+      showTextInFirstVisiblePannel(blankPannels, compiler.log.diagnostics.join('\n\n') + '\n');
     }
   } catch (e) {
     showTextInFirstVisiblePannel(panels, (e.stack || e) + '');

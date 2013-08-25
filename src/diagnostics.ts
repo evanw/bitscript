@@ -161,8 +161,8 @@ function semanticErrorBadParameter(log: Log, range: SourceRange, type: WrappedTy
   log.error(range, 'cannot use ' + type + ' as a type parameter');
 }
 
-function semanticErrorReleaseAndUse(log: Log, range: SourceRange, symbol: Symbol) {
-  log.error(range, symbol.name + ' is both released and used in the same expression');
+function semanticErrorMoveAndUse(log: Log, range: SourceRange, symbol: Symbol) {
+  log.error(range, symbol.name + ' is both moved and used in the same expression');
 }
 
 function semanticErrorBadMove(log: Log, range: SourceRange, type: WrappedType) {

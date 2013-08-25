@@ -156,15 +156,16 @@ class Initializer implements DeclarationVisitor<WrappedType> {
   }
 }
 
-enum IsOwnedPointerRelease {
+enum IsPointerMove {
   NO,
   YES
 }
 
-interface SymbolReleaseEntry {
+interface MovedSymbolEntry {
   symbol: Symbol;
-  isReleased: boolean;
+  isMoved: boolean;
   node: SymbolExpression;
+  reportedError: boolean;
 }
 
 class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, ExpressionVisitor<void> {
@@ -178,7 +179,7 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
   // unspecified order of operations in C++ and because it's likely a bug. This
   // tracks all symbol expressions that have been released (std::move() in C++)
   // and is cleared at the start of each statement.
-  symbolReleaseMap: SymbolReleaseEntry[] = [];
+  movedSymbolMap: MovedSymbolEntry[] = [];
 
   constructor(
     public log: Log) {
@@ -300,16 +301,16 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
     }
   }
 
-  checkSymbolExpression(node: SymbolExpression, isOwnedPointerRelease: IsOwnedPointerRelease) {
+  checkSymbolExpression(node: SymbolExpression, isPointerMove: IsPointerMove) {
     // Only check symbols of owned type
     if (node.symbol === null || !node.symbol.type.isOwned()) {
       return;
     }
 
     // Find the existing entry
-    var existingEntry: SymbolReleaseEntry = null;
-    for (var i = 0; i < this.symbolReleaseMap.length; i++) {
-      var entry: SymbolReleaseEntry = this.symbolReleaseMap[i];
+    var existingEntry: MovedSymbolEntry = null;
+    for (var i = 0; i < this.movedSymbolMap.length; i++) {
+      var entry: MovedSymbolEntry = this.movedSymbolMap[i];
       if (entry.symbol === node.symbol) {
         existingEntry = entry;
         break;
@@ -317,19 +318,20 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
     }
 
     // Perform the error check
-    if (existingEntry !== null && (isOwnedPointerRelease || existingEntry.isReleased)) {
-      semanticErrorReleaseAndUse(this.log, node.range, node.symbol);
+    if (existingEntry !== null && !existingEntry.reportedError && (isPointerMove || existingEntry.isMoved)) {
+      semanticErrorMoveAndUse(this.log, node.range, node.symbol);
+      existingEntry.reportedError = true;
     }
 
     // Create the entry if needed
     if (existingEntry === null) {
-      existingEntry = { symbol: node.symbol, isReleased: false, node: node };
-      this.symbolReleaseMap.push(existingEntry);
+      existingEntry = { symbol: node.symbol, isMoved: false, node: node, reportedError: false };
+      this.movedSymbolMap.push(existingEntry);
     }
 
     // Flag this entry to cause errors for future uses of this symbol
-    if (isOwnedPointerRelease) {
-      existingEntry.isReleased = true;
+    if (isPointerMove) {
+      existingEntry.isMoved = true;
     }
   }
 
@@ -349,10 +351,9 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
       return;
     }
 
-    // Check for a use after release
+    // Check for a use after move
     if (node instanceof SymbolExpression) {
-      var n: SymbolExpression = <SymbolExpression>node;
-      this.checkSymbolExpression(n, n.symbol !== null && n.symbol.type.isOwned() && type.isOwned() ? IsOwnedPointerRelease.YES : IsOwnedPointerRelease.NO);
+      this.checkSymbolExpression(<SymbolExpression>node, IsPointerMove.NO);
     }
   }
 
@@ -485,7 +486,7 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
     this.pushContext(this.context.cloneWithScope(node.scope));
     this.initializeBlock(node);
     node.statements.forEach(n => {
-      this.symbolReleaseMap = [];
+      this.movedSymbolMap = [];
       n.acceptStatementVisitor(this);
     });
     this.popContext();
@@ -661,6 +662,11 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
       return;
     }
 
+    // Check for a use and move in the same expression
+    if (node.value instanceof SymbolExpression) {
+      this.checkSymbolExpression(<SymbolExpression>node.value, IsPointerMove.YES);
+    }
+
     node.computedType = value.wrapWithout(TypeModifier.STORAGE);
   }
 
@@ -833,9 +839,9 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
       return;
     }
 
-    // Check for a use after release
+    // Check for a use after move
     if (node.value instanceof SymbolExpression) {
-      this.checkSymbolExpression(<SymbolExpression>node.value, IsOwnedPointerRelease.NO);
+      this.checkSymbolExpression(<SymbolExpression>node.value, IsPointerMove.NO);
     }
 
     // Substitute the type parameters from the object into the member
