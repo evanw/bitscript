@@ -20,44 +20,47 @@ class Symbol {
   }
 }
 
+enum ForEachSymbol {
+  CONTINUE,
+  BREAK,
+}
+
 class Scope {
-  symbols: Symbol[] = [];
+  // Note: All symbols are prefixed with ' ' to avoid collisions with native properties (i.e. __proto__)
+  private symbols: { [name: string]: Symbol } = {};
 
   constructor(
     public lexicalParent: Scope) {
   }
 
-  containsAbstractSymbols(): boolean {
-    for (var i = 0; i < this.symbols.length; i++) {
-      if (this.symbols[i].isAbstract) return true;
+  // Return true for continue, false for break
+  forEachSymbol(callback: (symbol: Symbol) => ForEachSymbol) {
+    for (var name in this.symbols) {
+      if (name[0] === ' ' && callback(this.symbols[name]) === ForEachSymbol.BREAK) {
+        break;
+      }
     }
-    return false;
+  }
+
+  containsAbstractSymbols(): boolean {
+    var isAbstract: boolean = false;
+    this.forEachSymbol(s => {
+      if (s.isAbstract) isAbstract = true;
+      return isAbstract ? ForEachSymbol.BREAK : ForEachSymbol.CONTINUE;
+    });
+    return isAbstract;
   }
 
   replace(symbol: Symbol) {
-    for (var i = 0; i < this.symbols.length; i++) {
-      if (this.symbols[i].name === symbol.name) {
-        this.symbols[i] = symbol;
-        return;
-      }
-    }
-    this.symbols.push(symbol);
+    this.symbols[' ' + symbol.name] = symbol;
   }
 
   define(name: string, type: WrappedType): Symbol {
-    var symbol: Symbol = new Symbol(name, type, this);
-    this.symbols.push(symbol);
-    return symbol;
+    return this.symbols[' ' + name] = new Symbol(name, type, this);
   }
 
   find(name: string): Symbol {
-    for (var i = 0; i < this.symbols.length; i++) {
-      var symbol: Symbol = this.symbols[i];
-      if (symbol.name === name) {
-        return symbol;
-      }
-    }
-    return null;
+    return this.symbols[' ' + name] || null;
   }
 
   lexicalFind(name: string): Symbol {
