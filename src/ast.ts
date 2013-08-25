@@ -250,6 +250,7 @@ class VariableDeclaration extends Declaration {
 
 interface ExpressionVisitor<T> {
   visitSymbolExpression(node: SymbolExpression): T;
+  visitMoveExpression(node: MoveExpression): T;
   visitUnaryExpression(node: UnaryExpression): T;
   visitBinaryExpression(node: BinaryExpression): T;
   visitTernaryExpression(node: TernaryExpression): T;
@@ -285,6 +286,22 @@ class SymbolExpression extends Expression {
 
   acceptExpressionVisitor<T>(visitor: ExpressionVisitor<T>): T {
     return visitor.visitSymbolExpression(this);
+  }
+}
+
+// A move expression is the only way to convert from an owned L-value.
+// Originally you could transfer ownership with a simple assignment, but
+// that led to too many dangling pointer mistakes. This way, ownership
+// transfers are explicit and easy to see when reading your code.
+class MoveExpression extends Expression {
+  constructor(
+    range: SourceRange,
+    public value: Expression) {
+    super(range);
+  }
+
+  acceptExpressionVisitor<T>(visitor: ExpressionVisitor<T>): T {
+    return visitor.visitMoveExpression(this);
   }
 }
 

@@ -259,6 +259,7 @@ pratt.prefix('+', Power.UNARY, buildUnaryPrefix);
 pratt.prefix('-', Power.UNARY, buildUnaryPrefix);
 pratt.prefix('!', Power.UNARY, buildUnaryPrefix);
 pratt.prefix('~', Power.UNARY, buildUnaryPrefix);
+pratt.prefix('move', Power.UNARY, (context, token, node) => new MoveExpression(spanRange(token.range, node.range), node));
 
 // Binary expressions
 pratt.infix(',', Power.COMMA, buildBinary);

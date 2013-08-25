@@ -334,11 +334,19 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
   }
 
   checkImplicitCast(type: WrappedType, node: Expression) {
-    if (!type.isError() && !node.computedType.isError()) {
-      if (!TypeLogic.canImplicitlyConvert(node.computedType, type)) {
-        semanticErrorIncompatibleTypes(this.log, node.range, node.computedType, type);
-        return;
-      }
+    if (type.isError() || node.computedType.isError()) {
+      return;
+    }
+
+    if (!TypeLogic.canImplicitlyConvert(node.computedType, type)) {
+      semanticErrorIncompatibleTypes(this.log, node.range, node.computedType, type);
+      return;
+    }
+
+    // Provide a special warning for implicitly casting from an owned L-value to an owned value
+    if (type.isOwned() && node.computedType.isOwned() && node.computedType.isStorage()) {
+      semanticErrorExpectedMove(this.log, node.range, node.computedType);
+      return;
     }
 
     // Check for a use after release
@@ -636,6 +644,24 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
     }
 
     node.computedType = node.symbol.type;
+  }
+
+  visitMoveExpression(node: MoveExpression) {
+    this.resolveAsExpression(node.value);
+
+    // Avoid reporting further errors
+    var value: WrappedType = node.value.computedType;
+    if (value.isError()) {
+      return;
+    }
+
+    // Can only move owned L-values
+    if (!value.isOwned() || !value.isStorage()) {
+      semanticErrorBadMove(this.log, node.range, value);
+      return;
+    }
+
+    node.computedType = value.wrapWithout(TypeModifier.STORAGE);
   }
 
   visitUnaryExpression(node: UnaryExpression) {

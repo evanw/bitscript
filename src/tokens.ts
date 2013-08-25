@@ -18,7 +18,7 @@ function tokenize(log: Log, source: Source): Token[] {
   ];
   var keywords: string[] = [
     'if', 'else', 'while', 'for', 'continue', 'break', 'return',
-    'class', 'true', 'false', 'null', 'new', 'this',
+    'class', 'true', 'false', 'null', 'new', 'this', 'move',
     'owned', 'shared', 'over',
   ];
 

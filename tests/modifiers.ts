@@ -231,11 +231,12 @@ test([
   'void baz(int a, owned Foo b) {}',
   'int main() {',
   '  owned Foo foo = new Foo();',
-  '  bar(foo, foo.x);',
-  '  baz(foo.x, foo);',
+  '  bar(move foo, foo.x);',
+  '  baz(foo.x, move foo);',
   '  return 0;',
   '}',
 ], [
+  // TODO
   'error on line 8 of <stdin>: foo is both released and used in the same expression',
   '',
   '  bar(foo, foo.x);',

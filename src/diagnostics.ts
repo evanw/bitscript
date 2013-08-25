@@ -164,3 +164,11 @@ function semanticErrorBadParameter(log: Log, range: SourceRange, type: WrappedTy
 function semanticErrorReleaseAndUse(log: Log, range: SourceRange, symbol: Symbol) {
   log.error(range, symbol.name + ' is both released and used in the same expression');
 }
+
+function semanticErrorBadMove(log: Log, range: SourceRange, type: WrappedType) {
+  log.error(range, 'cannot move ' + type);
+}
+
+function semanticErrorExpectedMove(log: Log, range: SourceRange, type: WrappedType) {
+  log.error(range, 'cannot move ' + type + ' without a move expression');
+}

@@ -353,6 +353,10 @@ class OutputJS implements StatementVisitor<Object>, DeclarationVisitor<Object>, 
     });
   }
 
+  visitMoveExpression(node: MoveExpression): Object {
+    return node.value.acceptExpressionVisitor(this);
+  }
+
   visitUnaryExpression(node: UnaryExpression): Object {
     var result: Object = this.wrap(node, {
       type: 'UnaryExpression',

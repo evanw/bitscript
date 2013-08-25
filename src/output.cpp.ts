@@ -380,18 +380,6 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
   }
 
   insertImplicitConversion(from: Expression, to: WrappedType): Object {
-    if (from.computedType.isOwned() && to.isOwned() && from.computedType.isStorage()) {
-      return {
-        kind: 'CallExpression',
-        callee: {
-          kind: 'MemberType',
-          inner: { kind: 'Identifier', name: 'std' },
-          member: { kind: 'Identifier', name: 'move' }
-        },
-        arguments: [from.acceptExpressionVisitor(this)]
-      };
-    }
-
     if (from.computedType.isOwned() && to.isShared()) {
       if (from instanceof NewExpression) {
         var node: NewExpression = <NewExpression>from;
@@ -660,6 +648,18 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
     return {
       kind: 'Identifier',
       name: node.name
+    };
+  }
+
+  visitMoveExpression(node: MoveExpression): Object {
+    return {
+      kind: 'CallExpression',
+      callee: {
+        kind: 'MemberType',
+        inner: { kind: 'Identifier', name: 'std' },
+        member: { kind: 'Identifier', name: 'move' }
+      },
+      arguments: [node.value.acceptExpressionVisitor(this)]
     };
   }
 
