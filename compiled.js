@@ -298,6 +298,7 @@ function tokenize(log, source) {
         'if',
         'else',
         'while',
+        'for',
         'continue',
         'break',
         'return',
@@ -715,7 +716,7 @@ var Scope = (function () {
         // Note: All symbols are prefixed with ' ' to avoid collisions with native properties (i.e. __proto__)
         this.symbols = {};
     }
-    // Return true for continue, false for break
+    // Return value determines continue vs break
     Scope.prototype.forEachSymbol = function (callback) {
         for (var name in this.symbols) {
             if (name[0] === ' ' && callback(this.symbols[name]) === ForEachSymbol.BREAK) {
@@ -918,6 +919,21 @@ var WhileStatement = (function (_super) {
         return visitor.visitWhileStatement(this);
     };
     return WhileStatement;
+})(Statement);
+
+var ForStatement = (function (_super) {
+    __extends(ForStatement, _super);
+    function ForStatement(range, setup, test, update, block) {
+        _super.call(this, range);
+        this.setup = setup;
+        this.test = test;
+        this.update = update;
+        this.block = block;
+    }
+    ForStatement.prototype.acceptStatementVisitor = function (visitor) {
+        return visitor.visitForStatement(this);
+    };
+    return ForStatement;
 })(Statement);
 
 var ReturnStatement = (function (_super) {
@@ -1373,7 +1389,6 @@ var Power;
 })(Power || (Power = {}));
 
 function parseGroup(context) {
-    var token = context.current();
     if (!context.expect('('))
         return null;
     var value = pratt.parse(context, Power.LOWEST);
@@ -1566,6 +1581,39 @@ else
         if (block === null)
             return null;
         return new WhileStatement(context.spanSince(range), value, block);
+    }
+
+    if (context.eat('for')) {
+        if (!context.expect('('))
+            return null;
+        var setup = null;
+        var test = null;
+        var update = null;
+        if (!context.peek(';')) {
+            setup = pratt.parse(context, Power.LOWEST);
+            if (setup === null)
+                return null;
+        }
+        if (!context.expect(';'))
+            return null;
+        if (!context.peek(';')) {
+            test = pratt.parse(context, Power.LOWEST);
+            if (test === null)
+                return null;
+        }
+        if (!context.expect(';'))
+            return null;
+        if (!context.peek(')')) {
+            update = pratt.parse(context, Power.LOWEST);
+            if (update === null)
+                return null;
+        }
+        if (!context.expect(')'))
+            return null;
+        var block = parseBlockOrStatement(context);
+        if (block === null)
+            return null;
+        return new ForStatement(context.spanSince(range), setup, test, update, block);
     }
 
     if (context.eat('return')) {
@@ -2449,6 +2497,27 @@ var Resolver = (function () {
         this.popContext();
     };
 
+    Resolver.prototype.visitForStatement = function (node) {
+        if (!this.context.inFunction()) {
+            semanticErrorUnexpectedStatement(this.log, node.range, 'for statement');
+            return;
+        }
+
+        if (node.setup !== null) {
+            this.resolveAsExpression(node.setup);
+        }
+        if (node.test !== null) {
+            this.resolveAsExpression(node.test);
+            this.checkImplicitCast(SpecialType.BOOL.wrap(TypeModifier.INSTANCE), node.test);
+        }
+        if (node.update !== null) {
+            this.resolveAsExpression(node.update);
+        }
+        this.pushContext(this.context.cloneForLoop());
+        this.visitBlock(node.block);
+        this.popContext();
+    };
+
     Resolver.prototype.visitReturnStatement = function (node) {
         if (!this.context.inFunction()) {
             semanticErrorUnexpectedStatement(this.log, node.range, 'return statement');
@@ -3016,6 +3085,16 @@ var OutputJS = (function () {
         });
     };
 
+    OutputJS.prototype.visitForStatement = function (node) {
+        return this.wrap(node, {
+            type: 'ForStatement',
+            init: node.setup !== null ? node.setup.acceptExpressionVisitor(this) : null,
+            test: node.test !== null ? node.test.acceptExpressionVisitor(this) : null,
+            update: node.update !== null ? node.update.acceptExpressionVisitor(this) : null,
+            body: this.visitBlock(node.block)
+        });
+    };
+
     OutputJS.prototype.visitReturnStatement = function (node) {
         return this.wrap(node, {
             type: 'ReturnStatement',
@@ -3509,7 +3588,11 @@ var OutputJS = (function () {
         '&': true,
         '^': true,
         '<<': true,
-        '>>': true
+        '>>': true,
+        // This is an integer operator because we force every value to be an integer
+        // before we assign it to the symbol, so assignment expressions will always
+        // result in an integer
+        '=': true
     };
     return OutputJS;
 })();
@@ -4149,6 +4232,16 @@ var OutputCPP = (function () {
         };
     };
 
+    OutputCPP.prototype.visitForStatement = function (node) {
+        return {
+            kind: 'ForStatement',
+            init: node.setup !== null ? node.setup.acceptExpressionVisitor(this) : null,
+            test: node.test !== null ? node.test.acceptExpressionVisitor(this) : null,
+            update: node.update !== null ? node.update.acceptExpressionVisitor(this) : null,
+            body: this.visitBlock(node.block)
+        };
+    };
+
     OutputCPP.prototype.visitReturnStatement = function (node) {
         return {
             kind: 'ReturnStatement',
@@ -4591,7 +4684,7 @@ function cli() {
             if (outputJS !== null) {
                 var root = path.relative(path.dirname(outputJS), '.');
                 var codeAndMap = OutputJS.generateWithSourceMap(compiler.module, root);
-                fs.writeFileSync(outputJS, codeAndMap.code + '\n//# sourceMappingURL=' + path.basename(outputJS) + '.map\n');
+                fs.writeFileSync(outputJS, codeAndMap.code + '\n/' + '/# sourceMappingURL=' + path.basename(outputJS) + '.map\n');
                 fs.writeFileSync(outputJS + '.map', codeAndMap.map + '\n');
             }
             if (outputCPP !== null)
