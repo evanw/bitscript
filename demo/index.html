@@ -298,9 +298,13 @@ function recompile() {
       var codeAndMap = panelNamed('Source Map').isVisible ? OutputJS.generateWithSourceMap(compiler.module, '.') : null;
       panelNamed('JavaScript').setTextIfVisible(function() { return (codeAndMap !== null ? codeAndMap.code : OutputJS.generate(compiler.module)) + '\n'; });
       panelNamed('C++11').setTextIfVisible(function() { return OutputCPP.generate(compiler.module) + '\n'; });
+      // panelNamed('Asm.js').setTextIfVisible(function() { return OutputAsmJS.generate(compiler.module, 'stdin') + '\n'; });
       panelNamed('Source Map').setTextIfVisible(function() { return codeAndMap.map + '\n'; });
     } else {
-      blankPannels.push(panelNamed('JavaScript'), panelNamed('C++11'), panelNamed('Source Map'));
+      blankPannels.push(panelNamed('JavaScript'));
+      blankPannels.push(panelNamed('C++11'));
+      // blankPannels.push(panelNamed('Asm.js'));
+      blankPannels.push(panelNamed('Source Map'));
     }
     if (compiler.module !== null) {
       panelNamed('AST').setTextIfVisible(function() { return JSON.stringify(compiler.module, filter, 2); });
@@ -345,6 +349,7 @@ var panels = [
   new Panel({ name: 'BitScript', readOnly: false }),
   new Panel({ name: 'JavaScript', readOnly: true }),
   new Panel({ name: 'C++11', readOnly: true }),
+  // new Panel({ name: 'Asm.js', readOnly: true }),
   new Panel({ name: 'AST', readOnly: true }),
   new Panel({ name: 'Tokens', readOnly: true }),
   new Panel({ name: 'Source Map', readOnly: true })

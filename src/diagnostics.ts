@@ -172,3 +172,7 @@ function semanticErrorBadMove(log: Log, range: SourceRange, type: WrappedType) {
 function semanticErrorExpectedMove(log: Log, range: SourceRange, type: WrappedType) {
   log.error(range, 'cannot move ' + type + ' without a move expression');
 }
+
+function semanticErrorBadVariableType(log: Log, range: SourceRange, type: WrappedType) {
+  log.error(range, 'cannot create variable of ' + type);
+}

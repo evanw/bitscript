@@ -16,7 +16,9 @@ SOURCES= \
 	src/typelogic.ts \
 	src/resolver.ts \
 	src/compiler.ts \
+	src/binarylayout.ts \
 	src/output.js.ts \
+	src/output.asmjs.ts \
 	src/output.cpp.ts
 
 TESTS= \

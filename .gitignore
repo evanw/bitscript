@@ -4,3 +4,6 @@
 /test.js
 /test.js.map
 /bitc
+/tests/asmjs/linkedlist.asm.js
+/tests/asmjs/linkedlist.js
+/tests/asmjs/linkedlist.js.map

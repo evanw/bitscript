@@ -1,11 +1,3 @@
-if (typeof esprima === 'undefined') {
-  var esprima = require('esprima');
-}
-
-if (typeof escodegen === 'undefined') {
-  var escodegen = require('escodegen');
-}
-
 class OutputJS implements StatementVisitor<Object>, DeclarationVisitor<Object>, ExpressionVisitor<Object> {
   needExtendsPolyfill: boolean = false;
   needMultiplicationPolyfill: boolean = false;
@@ -75,25 +67,25 @@ class OutputJS implements StatementVisitor<Object>, DeclarationVisitor<Object>, 
     };
 
     if (this.needMultiplicationPolyfill) {
-      result.body.unshift(esprima.parse([
+      result.body = esprima.parse([
         'if (!Math.imul) {',
         '  Math.imul = function(a, b) {',
         '    var al = a & 0xFFFF, bl = b & 0xFFFF;',
         '    return al * bl + ((a >>> 16) * bl + al * (b >>> 16) << 16) | 0;',
         '  };',
         '}',
-      ].join('\n')));
+      ].join('\n')).body.concat(result.body);
     }
 
     if (this.needExtendsPolyfill) {
-      result.body.unshift(esprima.parse([
+      result.body = esprima.parse([
         'function __extends(d, b) {',
         '  function c() {}',
         '  c.prototype = b.prototype;',
         '  d.prototype = new c();',
         '  d.prototype.constructor = d;',
         '}',
-      ].join('\n')));
+      ].join('\n')).body.concat(result.body);
     }
 
     return this.wrap(node, result);
@@ -307,7 +299,7 @@ class OutputJS implements StatementVisitor<Object>, DeclarationVisitor<Object>, 
       name: node.name
     });
 
-    // Insert "this." before struct members
+    // Insert "this." before object fields
     if (node.symbol.enclosingObject !== null) {
       return this.wrap(node, {
         type: 'MemberExpression',

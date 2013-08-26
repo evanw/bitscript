@@ -4,6 +4,7 @@ enum SymbolModifier {
 
 class Symbol {
   modifiers: number = 0;
+  byteOffset: number = 0;
   node: Declaration = null;
   enclosingObject: ObjectType = null;
   isOverridden: boolean = false;

@@ -1,0 +1,24 @@
+class Link {
+  int data;
+  owned Link next;
+}
+
+double main() {
+  // Make a long linked list
+  owned Link head;
+  int i;
+  for (i = 0; i < 10000; i = i + 1) {
+    head = new Link(i, move head);
+  }
+
+  // Do some O(n^2) operation
+  Link outer;
+  Link inner;
+  double total = 0;
+  for (outer = head; outer != null; outer = outer.next) {
+    for (inner = outer; inner != null; inner = inner.next) {
+      total = total + inner.data;
+    }
+  }
+  return total;
+}

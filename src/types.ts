@@ -10,6 +10,11 @@ enum TypeModifier {
 class Type {
   parameters: TypeParameter[] = [];
 
+  constructor(
+    public byteAlignment: number,
+    public byteSize: number) {
+  }
+
   wrap(modifiers: number): WrappedType {
     return new WrappedType(this, modifiers, []);
   }
@@ -22,17 +27,18 @@ class Type {
 
 class SpecialType extends Type {
   constructor(
+    byteSize: number,
     public name: string) {
-    super();
+    super(byteSize, byteSize);
   }
 
-  static INT: SpecialType = new SpecialType('int');
-  static BOOL: SpecialType = new SpecialType('bool');
-  static NULL: SpecialType = new SpecialType('null');
-  static VOID: SpecialType = new SpecialType('void');
-  static ERROR: SpecialType = new SpecialType('<error>');
-  static DOUBLE: SpecialType = new SpecialType('double');
-  static CIRCULAR: SpecialType = new SpecialType('<circular>');
+  static INT: SpecialType = new SpecialType(4, 'int');
+  static BOOL: SpecialType = new SpecialType(1, 'bool');
+  static NULL: SpecialType = new SpecialType(4, 'null');
+  static VOID: SpecialType = new SpecialType(0, 'void');
+  static ERROR: SpecialType = new SpecialType(0, '<error>');
+  static DOUBLE: SpecialType = new SpecialType(8, 'double');
+  static CIRCULAR: SpecialType = new SpecialType(0, '<circular>');
 
   asString(): string {
     return this.name;
@@ -43,7 +49,7 @@ class FunctionType extends Type {
   constructor(
     public result: WrappedType,
     public args: WrappedType[]) {
-    super();
+    super(0, 0);
   }
 
   asString(): string {
@@ -68,7 +74,7 @@ class ObjectType extends Type {
   constructor(
     public name: string,
     public scope: Scope) {
-    super();
+    super(0, 0);
   }
 
   // Lazily compute the constructor type when it's needed instead of when the
@@ -103,7 +109,7 @@ class ObjectType extends Type {
 class TypeParameter extends Type {
   constructor(
     public name: string) {
-    super();
+    super(4, 4); // All type parameters are pointers
   }
 
   asString(): string {
@@ -204,6 +210,14 @@ class WrappedType {
 
   asFunction(): FunctionType {
     return this.innerType instanceof FunctionType ? <FunctionType>this.innerType : null;
+  }
+
+  byteAlignment(): number {
+    return this.isPointer() ? 4 : this.innerType.byteAlignment;
+  }
+
+  byteSize(): number {
+    return this.isPointer() ? 4 : this.innerType.byteSize;
   }
 
   asString(): string {

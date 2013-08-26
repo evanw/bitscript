@@ -6,6 +6,18 @@ declare var process: any;
 
 var usr_bin_env_node; // This will turn into '#!/usr/bin/env node' but must be here to reserve the line in the source map
 
+if (typeof esprima === 'undefined') {
+  var esprima = require('esprima');
+}
+
+if (typeof escodegen === 'undefined') {
+  var escodegen = require('escodegen');
+}
+
+if (typeof cppcodegen === 'undefined') {
+  var cppcodegen = require('cppcodegen');
+}
+
 function assert(truth: boolean) {
   if (!truth) {
     throw new Error('assertion failed');
@@ -18,6 +30,27 @@ function repeat(text: string, times: number): string {
 
 function flatten(array: any[][]): any[] {
   return Array.prototype.concat.apply(Array.prototype, array);
+}
+
+function stableSort<T>(array: T[], compare: (left: T, right: T) => number) {
+  // Optimized bubble-sort from http://en.wikipedia.org/wiki/Bubble_sort
+  var current = array.length;
+  while (current > 0) {
+    var next = 0;
+    for (var i = 1; i < current; i++) {
+      if (compare(array[i - 1], array[i]) > 0) {
+        var temp = array[i - 1];
+        array[i - 1] = array[i];
+        array[i] = temp;
+        next = i;
+      }
+    }
+    current = next;
+  }
+}
+
+function nextMultipleOf(size: number, align: number): number {
+  return size + (align - size % align) % align;
 }
 
 class Source {

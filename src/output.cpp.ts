@@ -1,7 +1,3 @@
-if (typeof cppcodegen === 'undefined') {
-  var cppcodegen = require('cppcodegen');
-}
-
 class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>, ExpressionVisitor<Object> {
   needMemoryHeader: boolean = false;
   needVectorHeader: boolean = false;
@@ -139,8 +135,8 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
     case SpecialType.DOUBLE: return { kind: 'Identifier', name: 'double' };
     }
 
-    assert(type.innerType instanceof ObjectType);
-    var objectType: ObjectType = <ObjectType>type.innerType;
+    assert(type.isObject());
+    var objectType: ObjectType = type.asObject();
     var result: Object = {
       kind: 'Identifier',
       name: objectType.name

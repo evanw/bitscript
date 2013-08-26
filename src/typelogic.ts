@@ -137,7 +137,7 @@ class TypeLogic {
     }
 
     if (type.innerType instanceof FunctionType) {
-      var f: FunctionType = <FunctionType>type.innerType;
+      var f: FunctionType = type.asFunction();
       return new WrappedType(new FunctionType(
         TypeLogic.substitute(f.result, substitutions),
         f.args.map(t => TypeLogic.substitute(t, substitutions))
@@ -145,7 +145,7 @@ class TypeLogic {
     }
 
     if (type.innerType instanceof ObjectType) {
-      var o: ObjectType = <ObjectType>type.innerType;
+      var o: ObjectType = type.asObject();
       return new WrappedType(o, type.modifiers, TypeLogic.filterSubstitutionsForType(substitutions, o));
     }
 

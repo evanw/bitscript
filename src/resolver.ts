@@ -105,7 +105,7 @@ class Initializer implements DeclarationVisitor<WrappedType> {
       }
     });
 
-    // Lazily compute the constructor type and abstract flag, see ObjectType for details
+    // Lazily compute some class information (see ObjectType for the reason why)
     type.lazyInitializer = () => {
       node.block.scope.forEachSymbol(s => {
         this.resolver.ensureDeclarationIsInitialized(s.node);
@@ -143,6 +143,11 @@ class Initializer implements DeclarationVisitor<WrappedType> {
     });
     this.resolver.popContext();
 
+    // Avoid reporting further errors
+    if (node.result.computedType.isError() || args.some(t => t.isError())) {
+      return SpecialType.ERROR.wrap(0);
+    }
+
     return new FunctionType(node.result.computedType.wrapWith(TypeModifier.INSTANCE), args).wrap(TypeModifier.INSTANCE | TypeModifier.STORAGE);
   }
 
@@ -152,6 +157,13 @@ class Initializer implements DeclarationVisitor<WrappedType> {
 
     // Resolve the type
     this.resolver.resolveAsParameterizedType(node.type);
+
+    // Cannot make variables of type void
+    if (node.type.computedType.isVoid()) {
+      semanticErrorBadVariableType(this.resolver.log, node.type.range, node.type.computedType);
+      return SpecialType.ERROR.wrap(0);
+    }
+
     return node.type.computedType.wrapWith(TypeModifier.INSTANCE | TypeModifier.STORAGE);
   }
 }

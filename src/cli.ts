@@ -2,6 +2,8 @@ function cli() {
   var inputs: string[] = [];
   var outputJS: any = null;
   var outputCPP: any = null;
+  var outputAsmJS: any = null;
+  var moduleName: any = null;
   var helpFlag: boolean = false;
   var watchFlag: boolean = false;
 
@@ -59,6 +61,7 @@ function cli() {
         fs.writeFileSync(outputJS + '.map', codeAndMap.map + '\n');
       }
       if (outputCPP !== null) fs.writeFileSync(outputCPP, OutputCPP.generate(compiler.module) + '\n');
+      if (outputAsmJS !== null) fs.writeFileSync(outputAsmJS, OutputAsmJS.generate(compiler.module, moduleName) + '\n');
       console.log(gray(time() + 'build successful'));
       return true;
     }
@@ -69,6 +72,7 @@ function cli() {
       fs.unlinkSync(outputJS + '.map');
     }
     if (outputCPP !== null && fs.existsSync(outputCPP)) fs.unlinkSync(outputCPP);
+    if (outputAsmJS !== null && fs.existsSync(outputAsmJS)) fs.unlinkSync(outputAsmJS);
     if (watchFlag) showNotification(compiler.log.diagnostics[0]);
 
     // Use fancy colored output for TTYs
@@ -87,7 +91,7 @@ function cli() {
   function usage() {
     console.log([
       '',
-      'usage: bitc in1.bit in2.bit ... [--js out.js] [--cpp out.cpp] [--watch]',
+      'usage: bitc in1.bit in2.bit ... [--js out.js] [--cpp out.cpp] [--asmjs out.js] [--name moduleName] [--watch]',
       '',
     ].join('\n'));
   }
@@ -98,17 +102,24 @@ function cli() {
     var arg = args.shift();
     switch (arg) {
       case '-h': case '--help': helpFlag = true; break;
-      case '--watch': watchFlag = true; break;
       case '--js': outputJS = args.shift(); break;
       case '--cpp': outputCPP = args.shift(); break;
+      case '--asmjs': outputAsmJS = args.shift(); break;
+      case '--name': moduleName = args.shift(); break;
+      case '--watch': watchFlag = true; break;
       default: inputs.push(arg); break;
     }
   }
 
   // Validate command-line flags
-  if (helpFlag || outputJS === void 0 || outputCPP === void 0 || inputs.length === 0 || outputJS === null && outputCPP === null) {
+  if (helpFlag || outputJS === void 0 || outputCPP === void 0 || outputAsmJS === void 0 || moduleName === void 0 || inputs.length === 0) {
     usage();
     process.exit(1);
+  }
+
+  // Automatically generate a module name
+  if (outputAsmJS !== null && moduleName === null) {
+    moduleName = path.basename(outputAsmJS).replace(/[^\w]/g, '_');
   }
 
   // Main compilation logic
@@ -159,6 +170,7 @@ if (typeof exports !== 'undefined') {
   exports.ExpressionStatement = ExpressionStatement;
   exports.IfStatement = IfStatement;
   exports.WhileStatement = WhileStatement;
+  exports.ForStatement = ForStatement;
   exports.ReturnStatement = ReturnStatement;
   exports.BreakStatement = BreakStatement;
   exports.ContinueStatement = ContinueStatement;
@@ -168,6 +180,7 @@ if (typeof exports !== 'undefined') {
   exports.VariableDeclaration = VariableDeclaration;
   exports.Expression = Expression;
   exports.SymbolExpression = SymbolExpression;
+  exports.MoveExpression = MoveExpression;
   exports.UnaryExpression = UnaryExpression;
   exports.BinaryExpression = BinaryExpression;
   exports.TernaryExpression = TernaryExpression;
@@ -186,6 +199,7 @@ if (typeof exports !== 'undefined') {
   exports.Compiler = Compiler;
   exports.OutputJS = OutputJS;
   exports.OutputCPP = OutputCPP;
+  exports.OutputAsmJS = OutputAsmJS;
 }
 
 // Launch the command-line interface if we are run from the terminal
