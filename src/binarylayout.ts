@@ -73,8 +73,15 @@ class BinaryLayout {
     // together (we might as well since we have no pointer arithmetic)
     stableSort(symbols, (a, b) => b.type.byteSize() - a.type.byteSize());
 
-    // Start from the size of the base class
-    var byteOffset: number = objectType.baseType !== null ? objectType.baseType.byteSize : 0;
+    var byteOffset: number =
+      // Start from the size of the base class if there is one
+      objectType.baseType !== null ? objectType.baseType.byteSize :
+
+      // Base objects may need a vtable, which is always at offset 0
+      objectType.needsVTable() ? 4 :
+
+      // Otherwise, start from offset zero
+      0;
 
     // Give each symbol an offset with the correct alignment
     symbols.forEach(symbol => {
@@ -83,6 +90,6 @@ class BinaryLayout {
     });
 
     // Round up the size of the object from the end of the last field
-    objectType.byteSize = nextMultipleOf(byteOffset, objectType.byteAlignment);
+    objectType.byteSize = Math.max(1, nextMultipleOf(byteOffset, objectType.byteAlignment));
   }
 }

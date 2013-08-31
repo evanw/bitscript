@@ -18,22 +18,6 @@ class Module extends AST {
     public block: Block) {
     super(range);
   }
-
-  // Sort objects so base objects come before derived objects
-  sortedObjectDeclarations(): ObjectDeclaration[] {
-    var list = <ObjectDeclaration[]>this.block.statements.filter(n => n instanceof ObjectDeclaration);
-    for (var i = 0; i < list.length; i++) {
-      var I = list[i].symbol.type.asObject();
-      for (var j = 0; j < i; j++) {
-        var J = list[j].symbol.type.asObject();
-        if (TypeLogic.isBaseTypeOf(J, I)) {
-          list.splice(j, 0, list.splice(i, 1)[0]);
-          i = j - 1;
-        }
-      }
-    }
-    return list;
-  }
 }
 
 class Identifier extends AST {
@@ -51,6 +35,50 @@ class Block extends AST {
     range: SourceRange,
     public statements: Statement[]) {
     super(range);
+  }
+
+  objectDeclarations(): ObjectDeclaration[] {
+    return <ObjectDeclaration[]>this.statements.filter(n => n instanceof ObjectDeclaration);
+  }
+
+  // Sort objects so base objects come before derived objects
+  sortedObjectDeclarations(): ObjectDeclaration[] {
+    var list = this.objectDeclarations();
+    for (var i = 0; i < list.length; i++) {
+      var I = list[i].symbol.type.asObject();
+      for (var j = 0; j < i; j++) {
+        var J = list[j].symbol.type.asObject();
+        if (TypeLogic.isBaseTypeOf(J, I)) {
+          list.splice(j, 0, list.splice(i, 1)[0]);
+          i = j - 1;
+        }
+      }
+    }
+    return list;
+  }
+
+  variableDeclarations(): VariableDeclaration[] {
+    return <VariableDeclaration[]>this.statements.filter(n => n instanceof VariableDeclaration);
+  }
+
+  variableDeclarationsWithValues(): VariableDeclaration[] {
+    return this.variableDeclarations().filter(n => n.value !== null);
+  }
+
+  variableDeclarationsWithoutValues(): VariableDeclaration[] {
+    return this.variableDeclarations().filter(n => n.value !== null);
+  }
+
+  functionDeclarations(): FunctionDeclaration[] {
+    return <FunctionDeclaration[]>this.statements.filter(n => n instanceof FunctionDeclaration);
+  }
+
+  functionDeclarationsWithBlocks(): FunctionDeclaration[] {
+    return this.functionDeclarations().filter(n => n.block !== null);
+  }
+
+  functionDeclarationsWithoutBlocks(): FunctionDeclaration[] {
+    return this.functionDeclarations().filter(n => n.block !== null);
   }
 }
 

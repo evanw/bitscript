@@ -446,16 +446,16 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
   }
 
   visitModule(node: Module): Object {
-    var objects: ObjectDeclaration[] = node.sortedObjectDeclarations();
+    var objects: ObjectDeclaration[] = node.block.sortedObjectDeclarations();
     var result: any = {
       kind: 'Program',
       body: flatten([
         objects.map(n => this.forwardDeclareObjectType(n)),
         objects.map(n => this.declareObjectType(n)),
-        node.block.statements.filter(n => n instanceof VariableDeclaration).map(n => n.acceptStatementVisitor(this)),
-        node.block.statements.filter(n => n instanceof FunctionDeclaration).map(n => this.declareFunction(n)),
+        node.block.variableDeclarations().map(n => n.acceptStatementVisitor(this)),
+        node.block.functionDeclarations().map(n => this.declareFunction(n)),
         flatten(objects.map(n => this.generateFunctionsForObjectType(n, (n, o) => n.block !== null ? o : null))),
-        node.block.statements.filter(n => n instanceof FunctionDeclaration && n.block !== null).map(n => n.acceptStatementVisitor(this)),
+        node.block.functionDeclarationsWithBlocks().map(n => n.acceptStatementVisitor(this)),
       ])
     };
 

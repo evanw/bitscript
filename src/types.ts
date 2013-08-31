@@ -104,6 +104,10 @@ class ObjectType extends Type {
   asString(): string {
     return this.name;
   }
+
+  needsVTable(): boolean {
+    return this.hasDerivedTypes || this.baseType !== null;
+  }
 }
 
 class TypeParameter extends Type {

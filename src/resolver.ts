@@ -456,6 +456,7 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
     }
 
     // Mark the override
+    node.symbol.overriddenSymbol = symbol;
     symbol.isOverridden = true;
   }
 

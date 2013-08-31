@@ -7,6 +7,7 @@ class Symbol {
   byteOffset: number = 0;
   node: Declaration = null;
   enclosingObject: ObjectType = null;
+  overriddenSymbol: Symbol = null;
   isOverridden: boolean = false;
   isAbstract: boolean = false;
 
@@ -18,6 +19,18 @@ class Symbol {
 
   isOver(): boolean {
     return (this.modifiers & SymbolModifier.OVER) !== 0;
+  }
+
+  isVirtual(): boolean {
+    return this.isAbstract || this.isOverridden || this.overriddenSymbol !== null;
+  }
+
+  originalOverriddenSymbol(): Symbol {
+    var symbol: Symbol = this.overriddenSymbol;
+    while (symbol !== null && symbol.overriddenSymbol !== null) {
+      symbol = symbol.overriddenSymbol;
+    }
+    return symbol;
   }
 }
 
