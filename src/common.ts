@@ -6,6 +6,10 @@ declare var process: any;
 
 var usr_bin_env_node; // This will turn into '#!/usr/bin/env node' but must be here to reserve the line in the source map
 
+if (typeof process !== 'undefined') {
+  require('source-map-support').install();
+}
+
 if (typeof esprima === 'undefined') {
   var esprima = require('esprima');
 }

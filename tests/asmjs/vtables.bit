@@ -1,0 +1,54 @@
+void output(int value);
+
+class A {
+  int foo();
+  int bar();
+}
+
+class B : A {
+  over int foo() { return 1; }
+  over int bar() { return 2; }
+}
+
+class C : A {
+  over int foo() { return 3; }
+  over int bar() { return 4; }
+}
+
+class D : B {
+  over int foo() { return 5; }
+  over int bar() { return 6; }
+}
+
+void testA(A a) {
+  output(a.foo());
+  output(a.bar());
+}
+
+void testB(B b) {
+  output(b.foo());
+  output(b.bar());
+}
+
+void testC(C c) {
+  output(c.foo());
+  output(c.bar());
+}
+
+void testD(D d) {
+  output(d.foo());
+  output(d.bar());
+}
+
+void main() {
+  testA(new B());
+  testA(new C());
+  testA(new D());
+
+  testB(new B());
+  testB(new D());
+
+  testC(new C());
+
+  testD(new D());
+}

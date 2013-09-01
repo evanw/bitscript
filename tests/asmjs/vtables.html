@@ -1,0 +1,21 @@
+<script src="vtables.js"></script>
+<script>
+
+var values = [];
+var output = function(value) { values.push(value); };
+main();
+document.write('Output from normal JavaScript:<br>' + values.join(', ') + '<p>');
+
+</script>
+<script src="vtables.asm.js"></script>
+<script>
+
+var values = [];
+var output = function(value) { values.push(value); };
+var heap = new Int32Array(0x1000);
+var module = vtables_asm_js(this, { output: output, initialStackPointer: heap.byteLength }, heap.buffer);
+module.$init();
+module.main();
+document.write('Output from asm.js:<br>' + values.join(', ') + '<p>');
+
+</script>

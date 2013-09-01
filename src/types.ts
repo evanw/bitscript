@@ -61,6 +61,8 @@ class ObjectType extends Type {
   lazyInitializer: () => void = null;
   _constructorType: FunctionType = null;
   baseType: ObjectType = null;
+  vtableByteOffset: number = 0;
+  vtable: Symbol[] = [];
 
   // Does some other object type have this as a base?
   hasDerivedTypes: boolean = false;
@@ -106,7 +108,7 @@ class ObjectType extends Type {
   }
 
   needsVTable(): boolean {
-    return this.hasDerivedTypes || this.baseType !== null;
+    return this.vtable.length !== 0;
   }
 }
 

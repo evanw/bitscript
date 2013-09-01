@@ -1,15 +1,19 @@
+// TODO: static members
 enum SymbolModifier {
   OVER = 1, // Is this symbol hiding another symbol from the base type?
 }
 
 class Symbol {
   modifiers: number = 0;
-  byteOffset: number = 0;
   node: Declaration = null;
   enclosingObject: ObjectType = null;
   overriddenSymbol: Symbol = null;
   isOverridden: boolean = false;
   isAbstract: boolean = false;
+
+  // This means the byte offset in the object for object fields and the
+  // byte offset in the object's vtable for virtual member functions.
+  byteOffset: number = 0;
 
   constructor(
     public name: string,

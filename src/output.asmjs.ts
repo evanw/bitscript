@@ -89,10 +89,20 @@ class AsmJSPair {
   }
 }
 
+class AsmJSVTableAddress {
+  constructor(
+    public type: ObjectType,
+    public address: number) {
+  }
+}
+
 // Note: This whole thing was hacked up really fast and is pretty messy. It's
 // also currently incomplete and doesn't yet support things you probably want
 // like lists, virtual functions, and shared pointers, and freeing memory.
 class OutputAsmJS implements StatementVisitor<any>, DeclarationVisitor<any>, ExpressionVisitor<AsmJSPair> {
+  vtableAddresses: AsmJSVTableAddress[] = [];
+  nextGeneratedVariableID: number = 0;
+  generatedVariables: string[] = [];
   returnType: WrappedType = null;
   usesIntegerMultiplication: boolean = false;
   functionTables: { [key: string]: FunctionDeclaration[] } = {};
@@ -110,19 +120,31 @@ class OutputAsmJS implements StatementVisitor<any>, DeclarationVisitor<any>, Exp
   }
 
   static doubleValue(value: number): AsmJSPair {
-    return new AsmJSPair(AsmJSType.DOUBLE, {
+    var isNegative: boolean = value < 0;
+    value = Math.abs(value);
+    var result: any = {
       type: 'Literal',
       raw: value.toString().indexOf('.') >= 0 ? value.toString() : value.toString().replace(/([eE]|$)/, '.0$1'),
       value: value
-    });
+    };
+    return new AsmJSPair(AsmJSType.DOUBLE, isNegative ? {
+      type: 'UnaryExpression',
+      operator: '-',
+      argument: result
+    } : result);
   }
 
   static integerValue(value: number): AsmJSPair {
     assert(value === (0 | value));
-    return new AsmJSPair(value < 0 ? AsmJSType.SIGNED : AsmJSType.FIXNUM, {
+    var result: any = {
       type: 'Literal',
-      value: value
-    });
+      value: Math.abs(value)
+    };
+    return new AsmJSPair(value < 0 ? AsmJSType.SIGNED : AsmJSType.FIXNUM, value < 0 ? {
+      type: 'UnaryExpression',
+      operator: '-',
+      argument: result
+    } : result);
   }
 
   static defaultValueForType(type: WrappedType): AsmJSPair {
@@ -143,6 +165,7 @@ class OutputAsmJS implements StatementVisitor<any>, DeclarationVisitor<any>, Exp
   }
 
   static wrapWithSignedTypeAnnotation(result: AsmJSPair): AsmJSPair {
+    assert(typeof result.result.type === 'string')
     return new AsmJSPair(AsmJSType.SIGNED, {
       type: 'BinaryExpression',
       operator: '|',
@@ -215,7 +238,7 @@ class OutputAsmJS implements StatementVisitor<any>, DeclarationVisitor<any>, Exp
     if (type.isDouble()) return 'D';
     if (type.isInt() || type.isPointer() || type.isBool()) return 'I';
     if (type.isVoid()) return 'V';
-    if (type.isFunction()) return 'fn$' + OutputAsmJS.keyForType(type.asFunction().result) +
+    if (type.isFunction()) return '$fn' + OutputAsmJS.keyForType(type.asFunction().result) +
       type.asFunction().args.map(t => OutputAsmJS.keyForType(t)).join('');
     assert(false);
   }
@@ -224,35 +247,52 @@ class OutputAsmJS implements StatementVisitor<any>, DeclarationVisitor<any>, Exp
     return symbol.isAbstract || symbol.isOverridden;
   }
 
-  static manglePropertyLookup(node: Expression, symbol: Symbol): any {
-    if (symbol.enclosingObject !== null) {
-      if (node !== null && OutputAsmJS.isVirtualSymbol(symbol)) {
-        throw new Error('TODO: EMIT VTABLE LOOKUP');
-      }
-      return { type: 'Identifier', name: symbol.enclosingObject.name + '$' + symbol.name };
-    }
-    return { type: 'Identifier', name: symbol.name };
+  static mangleSymbolName(symbol: Symbol): any {
+    return {
+      type: 'Identifier',
+      name: (symbol.enclosingObject !== null ? symbol.enclosingObject.name + '$' : '') + symbol.name
+    };
   }
 
-  static dereferenceMemory(pointer: AsmJSPair, symbol: Symbol): AsmJSPair {
+  mangleVTableLookup(generatedVariableName: string, objectType: ObjectType, symbol: Symbol): any {
+    var key: string = OutputAsmJS.keyForType(symbol.type);
+    return {
+      type: 'MemberExpression',
+      object: { type: 'Identifier', name: key },
+      property: {
+        type: 'BinaryExpression',
+        operator: '&',
+        left: OutputAsmJS.dereferenceMemory(symbol.byteOffset, OutputAsmJS.dereferenceMemory(
+          objectType.vtableByteOffset, new AsmJSPair(AsmJSType.INT, { type: 'Identifier', name: generatedVariableName }), false), false).result,
+        right: { type: 'Literal', value: OutputAsmJS.functionTableLength(this.functionTableForKey(key)) - 1 }
+      },
+      computed: true
+    };
+  }
+
+  static dereferenceMemory(byteOffset: number, pointer: AsmJSPair, isDouble: boolean): AsmJSPair {
     // Values from an Int32Array are INTISH and values from a Float64Array are DOUBLISH
-    var type: AsmJSType = symbol.type.isDouble() ? AsmJSType.DOUBLISH : AsmJSType.INTISH;
+    var type: AsmJSType = isDouble ? AsmJSType.DOUBLISH : AsmJSType.INTISH;
     return new AsmJSPair(type, {
       type: 'MemberExpression',
-      object: { type: 'Identifier', name: symbol.type.isDouble() ? 'F64' : 'I32' },
+      object: { type: 'Identifier', name: isDouble ? 'F64' : 'I32' },
       property: {
         type: 'BinaryExpression',
         operator: '>>',
-        left: symbol.byteOffset === 0 ? pointer.result : {
+        left: byteOffset === 0 ? pointer.result : {
           type: 'BinaryExpression',
           operator: '+',
           left: OutputAsmJS.wrapWithTypeAnnotation(pointer, AsmJSType.INT).result,
-          right: { type: 'Literal', value: symbol.byteOffset }
+          right: { type: 'Literal', value: byteOffset }
         },
-        right: { type: 'Literal', value: symbol.type.isDouble() ? 3 : 2 }
+        right: { type: 'Literal', value: isDouble ? 3 : 2 }
       },
       computed: true
     });
+  }
+
+  static dereferenceSymbolMemory(pointer: AsmJSPair, symbol: Symbol): AsmJSPair {
+    return OutputAsmJS.dereferenceMemory(symbol.byteOffset, pointer, symbol.type.isDouble());
   }
 
   static emitTypeAnnotationsForArguments(args: VariableDeclaration[]): any[] {
@@ -299,6 +339,18 @@ class OutputAsmJS implements StatementVisitor<any>, DeclarationVisitor<any>, Exp
     return localSymbols;
   }
 
+  static functionTableLength(table: FunctionDeclaration[]): number {
+    var count: number = 1;
+    while (count < table.length) {
+      count <<= 1;
+    }
+    return count;
+  }
+
+  functionTableForKey(key: string): FunctionDeclaration[] {
+    return this.functionTables[key] || (this.functionTables[key] = []);
+  }
+
   getBaseVariables(node: Expression): VariableDeclaration[] {
     if (node instanceof SymbolExpression) {
       var base: ObjectDeclaration = <ObjectDeclaration>(<SymbolExpression>node).symbol.node;
@@ -307,11 +359,23 @@ class OutputAsmJS implements StatementVisitor<any>, DeclarationVisitor<any>, Exp
     return [];
   }
 
+  getVTableAddress(objectType: ObjectType): AsmJSVTableAddress {
+    for (var i = 0; i < this.vtableAddresses.length; i++) {
+      var address: AsmJSVTableAddress = this.vtableAddresses[i];
+      if (address.type === objectType) {
+        return address;
+      }
+    }
+    return null;
+  }
+
   generateConstructor(node: ObjectDeclaration): any {
     var variables: VariableDeclaration[] = <VariableDeclaration[]>node.block.statements.filter(n => n instanceof VariableDeclaration);
     var baseVariables: VariableDeclaration[] = this.getBaseVariables(node.base).filter(n => n.value === null);
     var args: VariableDeclaration[] = baseVariables.concat(variables.filter(n => n.value === null));
     var self: any = { type: 'Identifier', name: 'self' };
+    var objectType: ObjectType = node.symbol.type.asObject();
+    var vtableAddress: AsmJSVTableAddress = this.getVTableAddress(objectType);
 
     // Create the constructor function
     var result: any = {
@@ -345,6 +409,17 @@ class OutputAsmJS implements StatementVisitor<any>, DeclarationVisitor<any>, Exp
             }
           },
 
+          // Set the vtable
+          vtableAddress === null ? [] : <any>{
+            type: 'ExpressionStatement',
+            expression: {
+              type: 'AssignmentExpression',
+              operator: '=',
+              left: OutputAsmJS.dereferenceMemory(objectType.vtableByteOffset, new AsmJSPair(AsmJSType.INT, self), false).result,
+              right: { type: 'Literal', value: vtableAddress.address }
+            }
+          },
+
           // Initialize each variable
           variables.map(n => {
             var type: AsmJSType = OutputAsmJS.typeToAsmJSType(n.symbol.type);
@@ -353,7 +428,7 @@ class OutputAsmJS implements StatementVisitor<any>, DeclarationVisitor<any>, Exp
               expression: {
                 type: 'AssignmentExpression',
                 operator: '=',
-                left: OutputAsmJS.dereferenceMemory(new AsmJSPair(AsmJSType.INT, self), n.symbol).result,
+                left: OutputAsmJS.dereferenceSymbolMemory(new AsmJSPair(AsmJSType.INT, self), n.symbol).result,
                 right: OutputAsmJS.wrapWithTypeAnnotation(n.value !== null ? n.value.acceptExpressionVisitor(this) :
                   new AsmJSPair(type, OutputAsmJS.visitIdentifier(n.id)), type).result
               }
@@ -376,7 +451,7 @@ class OutputAsmJS implements StatementVisitor<any>, DeclarationVisitor<any>, Exp
     return node.block.statements.filter(n => n instanceof FunctionDeclaration && n.block !== null).map(n => {
       var result: any = this.visitFunctionDeclaration(n);
       var self: any = { type: 'Identifier', name: 'self' };
-      result.id = OutputAsmJS.manglePropertyLookup(null, (<FunctionDeclaration>n).symbol);
+      result.id = OutputAsmJS.mangleSymbolName((<FunctionDeclaration>n).symbol);
       result.params.unshift(self);
       result.body.body.unshift({
         type: 'ExpressionStatement',
@@ -398,6 +473,27 @@ class OutputAsmJS implements StatementVisitor<any>, DeclarationVisitor<any>, Exp
     var varibles: VariableDeclaration[] = <VariableDeclaration[]>node.block.statements.filter(n => n instanceof VariableDeclaration);
     var functions: FunctionDeclaration[] = <FunctionDeclaration[]>node.block.statements.filter(n => n instanceof FunctionDeclaration && n.block !== null);
     var externalFunctions: FunctionDeclaration[] = <FunctionDeclaration[]>node.block.statements.filter(n => n instanceof FunctionDeclaration && n.block === null);
+    var initialConstantOffset: number = 2; // First 2 integers (8 bytes) are reserved for null pointers
+    var constantIntegerData: number[] = [];
+
+    // Fill in vtables
+    objects.forEach(n => {
+      var objectType: ObjectType = n.symbol.type.asObject();
+      this.vtableAddresses.push(new AsmJSVTableAddress(objectType, initialConstantOffset + constantIntegerData.length << 2));
+      objectType.vtable.forEach(symbol => {
+        assert(symbol.isVirtual());
+        if (!symbol.isAbstract) {
+          var key: string = OutputAsmJS.keyForType(symbol.type);
+          var table: FunctionDeclaration[] = this.functionTableForKey(key);
+          constantIntegerData.push(table.length);
+          table.push(<FunctionDeclaration>symbol.node);
+        } else {
+          constantIntegerData.push(-1); // Pure virtual function
+        }
+      }, this);
+    }, this);
+
+    // Create functions
     var functionBodies: any[] =
       functions.map(this.visitFunctionDeclaration, this).concat(
       objects.map(this.generateConstructor, this)).
@@ -458,6 +554,55 @@ class OutputAsmJS implements StatementVisitor<any>, DeclarationVisitor<any>, Exp
     // Then emit all functions
     body = body.concat(functionBodies);
 
+    // Special initialization function for constant data
+    body = body.concat({
+      type: 'FunctionDeclaration',
+      params: [],
+      id: { type: 'Identifier', name: '$init' },
+      body: {
+        type: 'BlockStatement',
+        body: constantIntegerData.map((value, i) => ({
+          type: 'ExpressionStatement',
+          expression: {
+            type: 'AssignmentExpression',
+            operator: '=',
+            left: {
+              type: 'MemberExpression',
+              object: { type: 'Identifier', name: 'I32' },
+              property: { type: 'Literal', value: initialConstantOffset + i },
+              computed: true
+            },
+            right: OutputAsmJS.integerValue(value).result
+          }
+        }))
+      }
+    });
+
+    // Then emit function tables
+    for (var key in this.functionTables) {
+      var table: FunctionDeclaration[] = this.functionTables[key];
+      var count: number = OutputAsmJS.functionTableLength(table);
+      var elements: any[] = [];
+
+      // Repeat the last function for padding to the next power of 2
+      for (var i = 0; i < count; i++) {
+        elements.push(OutputAsmJS.mangleSymbolName(table[Math.min(table.length - 1, i)].symbol));
+      }
+
+      body.push({
+        type: 'VariableDeclaration',
+        declarations: [{
+          type: 'VariableDeclarator',
+          id: { type: 'Identifier', name: key },
+          init: {
+            type: 'ArrayExpression',
+            elements: elements
+          }
+        }],
+        kind: 'var'
+      });
+    }
+
     // End with the export list
     body.push({
       type: 'ReturnStatement',
@@ -467,7 +612,11 @@ class OutputAsmJS implements StatementVisitor<any>, DeclarationVisitor<any>, Exp
           type: 'Property',
           key: OutputAsmJS.visitIdentifier(n.id),
           value: OutputAsmJS.visitIdentifier(n.id)
-        }))
+        })).concat({
+          type: 'Property',
+          key: { type: 'Identifier', name: '$init' },
+          value: { type: 'Identifier', name: '$init' }
+        })
       }
     });
 
@@ -517,7 +666,7 @@ class OutputAsmJS implements StatementVisitor<any>, DeclarationVisitor<any>, Exp
     var elseBlock: any = node.elseBlock !== null ? this.visitBlock(node.elseBlock) : null;
     return {
       type: 'IfStatement',
-      test: OutputAsmJS.wrapWithTypeAnnotation(node.test.acceptExpressionVisitor(this).result, AsmJSType.INT),
+      test: OutputAsmJS.wrapWithTypeAnnotation(node.test.acceptExpressionVisitor(this), AsmJSType.INT).result,
       consequent: this.visitBlock(node.thenBlock),
       alternate: elseBlock !== null && elseBlock.body.length === 1 && elseBlock.body[0].type === 'IfStatement' ? elseBlock.body[0] : elseBlock
     };
@@ -526,7 +675,7 @@ class OutputAsmJS implements StatementVisitor<any>, DeclarationVisitor<any>, Exp
   visitWhileStatement(node: WhileStatement): any {
     return {
       type: 'WhileStatement',
-      test: OutputAsmJS.wrapWithTypeAnnotation(node.test.acceptExpressionVisitor(this).result, AsmJSType.INT),
+      test: OutputAsmJS.wrapWithTypeAnnotation(node.test.acceptExpressionVisitor(this), AsmJSType.INT).result,
       body: this.visitBlock(node.block)
     };
   }
@@ -578,8 +727,11 @@ class OutputAsmJS implements StatementVisitor<any>, DeclarationVisitor<any>, Exp
   }
 
   visitFunctionDeclaration(node: FunctionDeclaration): any {
+    // Generate the code body
     assert(node.block !== null);
     this.returnType = node.symbol.type.asFunction().result;
+    this.generatedVariables = [];
+    var body: any = this.visitBlock(node.block);
 
     // Emit type annotations for arguments
     var args: any[] = OutputAsmJS.emitTypeAnnotationsForArguments(node.args);
@@ -593,9 +745,17 @@ class OutputAsmJS implements StatementVisitor<any>, DeclarationVisitor<any>, Exp
         init: OutputAsmJS.defaultValueForType(symbol.type).result
       }],
       kind: 'var'
-    }));
+    })).concat(this.generatedVariables.map(name => ({
+      type: 'VariableDeclaration',
+      declarations: [{
+        type: 'VariableDeclarator',
+        id: { type: 'Identifier', name: name },
+        init: { type: 'Literal', value: 0 }
+      }],
+      kind: 'var'
+    })));
 
-    var body: any = this.visitBlock(node.block);
+    // Emit a function declaration with everything
     body.body = args.concat(locals, body.body);
     return {
       type: 'FunctionDeclaration',
@@ -621,7 +781,7 @@ class OutputAsmJS implements StatementVisitor<any>, DeclarationVisitor<any>, Exp
   visitSymbolExpression(node: SymbolExpression): AsmJSPair {
     // Access object fields off of "this"
     if (node.symbol.enclosingObject !== null) {
-      return OutputAsmJS.dereferenceMemory(new AsmJSPair(AsmJSType.INT, { type: 'Identifier', name: 'self' }), node.symbol);
+      return OutputAsmJS.dereferenceSymbolMemory(new AsmJSPair(AsmJSType.INT, { type: 'Identifier', name: 'self' }), node.symbol);
     }
 
     return new AsmJSPair(OutputAsmJS.typeToAsmJSType(node.computedType), {
@@ -771,14 +931,14 @@ class OutputAsmJS implements StatementVisitor<any>, DeclarationVisitor<any>, Exp
     var type: AsmJSType = OutputAsmJS.typeToAsmJSType(node.computedType);
     return new AsmJSPair(type, {
       type: 'ConditionalExpression',
-      test: OutputAsmJS.wrapWithTypeAnnotation(node.value.acceptExpressionVisitor(this), AsmJSType.INT),
-      consequent: OutputAsmJS.wrapWithTypeAnnotation(node.trueValue.acceptExpressionVisitor(this), type),
-      alternate: OutputAsmJS.wrapWithTypeAnnotation(node.falseValue.acceptExpressionVisitor(this), type)
+      test: OutputAsmJS.wrapWithTypeAnnotation(node.value.acceptExpressionVisitor(this), AsmJSType.INT).result,
+      consequent: OutputAsmJS.wrapWithTypeAnnotation(node.trueValue.acceptExpressionVisitor(this), type).result,
+      alternate: OutputAsmJS.wrapWithTypeAnnotation(node.falseValue.acceptExpressionVisitor(this), type).result
     });
   }
 
   visitMemberExpression(node: MemberExpression): AsmJSPair {
-    return OutputAsmJS.dereferenceMemory(
+    return OutputAsmJS.dereferenceSymbolMemory(
       node.value.acceptExpressionVisitor(this),
       node.symbol);
   }
@@ -833,7 +993,34 @@ class OutputAsmJS implements StatementVisitor<any>, DeclarationVisitor<any>, Exp
     if (node.value instanceof MemberExpression) {
       var member = <MemberExpression>node.value;
       args.unshift(OutputAsmJS.wrapWithTypeAnnotation(member.value.acceptExpressionVisitor(this), AsmJSType.INT));
-      return OutputAsmJS.generateCallExpression(new AsmJSPair(AsmJSType.UNKNOWN, OutputAsmJS.manglePropertyLookup(member.value, member.symbol)), args, resultType);
+
+      // Special-case a vtable call
+      if (OutputAsmJS.isVirtualSymbol(member.symbol)) {
+        // Cache the object for "this" in a generated variable because we need
+        // it more than once (once for the argument and once for the vtable)
+        var name: string = '$' + this.nextGeneratedVariableID++;
+        var object: AsmJSPair = args.shift();
+        args.unshift(new AsmJSPair(object.type, { type: 'Identifier', name: name }));
+
+        // Wrap the call in code that assigns to the generated variable
+        var call: AsmJSPair = OutputAsmJS.generateCallExpression(new AsmJSPair(AsmJSType.UNKNOWN,
+          this.mangleVTableLookup(name, member.value.computedType.asObject(), member.symbol)), args, resultType);
+        this.generatedVariables.push(name);
+        return new AsmJSPair(call.type, {
+          type: 'SequenceExpression',
+          expressions: [
+            {
+              type: 'AssignmentExpression',
+              operator: '=',
+              left: { type: 'Identifier', name: name },
+              right: object.result
+            },
+            call.result
+          ]
+        });
+      }
+
+      return OutputAsmJS.generateCallExpression(new AsmJSPair(AsmJSType.UNKNOWN, OutputAsmJS.mangleSymbolName(member.symbol)), args, resultType);
     }
 
     return OutputAsmJS.generateCallExpression(node.value.acceptExpressionVisitor(this), args, resultType);
