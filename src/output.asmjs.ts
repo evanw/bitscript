@@ -75,10 +75,6 @@ enum AsmJSType {
   // The abstract extern type represents the root of all types that can escape
   // back into external JavaScript.
   EXTERN,
-
-  // BitScript-specific special types for the return type of CallExpressions.
-  RETURN_DOUBLE,
-  RETURN_INT,
 }
 
 // Bundles a JavaScript AST with an asm.js type to know where to insert casts
@@ -98,14 +94,15 @@ class AsmJSVTableAddress {
 
 // Note: This whole thing was hacked up really fast and is pretty messy. It's
 // also currently incomplete and doesn't yet support things you probably want
-// like lists, virtual functions, and shared pointers, and freeing memory.
+// like lists, shared pointers, and freeing memory.
 class OutputAsmJS implements StatementVisitor<any>, DeclarationVisitor<any>, ExpressionVisitor<AsmJSPair> {
   vtableAddresses: AsmJSVTableAddress[] = [];
   nextGeneratedVariableID: number = 0;
   generatedVariables: string[] = [];
   returnType: WrappedType = null;
-  usesIntegerMultiplication: boolean = false;
   functionTables: { [key: string]: FunctionDeclaration[] } = {};
+
+  static NAME_FOR_THIS: string = '$this';
 
   static generate(node: Module, moduleName: string): string {
     BinaryLayout.run(node);
@@ -196,10 +193,10 @@ class OutputAsmJS implements StatementVisitor<any>, DeclarationVisitor<any>, Exp
       break;
 
     case AsmJSType.EXTERN:
-      if (result.type === AsmJSType.DOUBLISH || result.type === AsmJSType.RETURN_DOUBLE) {
+      if (result.type === AsmJSType.DOUBLISH) {
         return OutputAsmJS.wrapWithDoubleTypeAnnotation(result);
       }
-      if (result.type === AsmJSType.INT || result.type === AsmJSType.INTISH || result.type === AsmJSType.RETURN_INT) {
+      if (result.type === AsmJSType.INT || result.type === AsmJSType.INTISH) {
         return OutputAsmJS.wrapWithSignedTypeAnnotation(result);
       }
       break;
@@ -275,7 +272,7 @@ class OutputAsmJS implements StatementVisitor<any>, DeclarationVisitor<any>, Exp
     var type: AsmJSType = isDouble ? AsmJSType.DOUBLISH : AsmJSType.INTISH;
     return new AsmJSPair(type, {
       type: 'MemberExpression',
-      object: { type: 'Identifier', name: isDouble ? 'F64' : 'I32' },
+      object: { type: 'Identifier', name: isDouble ? '$F64' : '$I32' },
       property: {
         type: 'BinaryExpression',
         operator: '>>',
@@ -373,7 +370,7 @@ class OutputAsmJS implements StatementVisitor<any>, DeclarationVisitor<any>, Exp
     var variables: VariableDeclaration[] = <VariableDeclaration[]>node.block.statements.filter(n => n instanceof VariableDeclaration);
     var baseVariables: VariableDeclaration[] = this.getBaseVariables(node.base).filter(n => n.value === null);
     var args: VariableDeclaration[] = baseVariables.concat(variables.filter(n => n.value === null));
-    var self: any = { type: 'Identifier', name: 'self' };
+    var self: any = { type: 'Identifier', name: OutputAsmJS.NAME_FOR_THIS };
     var objectType: ObjectType = node.symbol.type.asObject();
     var vtableAddress: AsmJSVTableAddress = this.getVTableAddress(objectType);
 
@@ -403,9 +400,14 @@ class OutputAsmJS implements StatementVisitor<any>, DeclarationVisitor<any>, Exp
           node.base === null ? [] : <any>{
             type: 'ExpressionStatement',
             expression: {
-              type: 'CallExpression',
-              callee: node.base.acceptExpressionVisitor(this).result,
-              arguments: [self].concat(baseVariables.map(n => OutputAsmJS.visitIdentifier(n.id)))
+              type: 'BinaryExpression',
+              operator: '|',
+              left: {
+                type: 'CallExpression',
+                callee: node.base.acceptExpressionVisitor(this).result,
+                arguments: [self].concat(baseVariables.map(n => OutputAsmJS.visitIdentifier(n.id)))
+              },
+              right: { type: 'Literal', value: 0 }
             }
           },
 
@@ -450,7 +452,7 @@ class OutputAsmJS implements StatementVisitor<any>, DeclarationVisitor<any>, Exp
   generateMemberFunctions(node: ObjectDeclaration): any[] {
     return node.block.statements.filter(n => n instanceof FunctionDeclaration && n.block !== null).map(n => {
       var result: any = this.visitFunctionDeclaration(n);
-      var self: any = { type: 'Identifier', name: 'self' };
+      var self: any = { type: 'Identifier', name: OutputAsmJS.NAME_FOR_THIS };
       result.id = OutputAsmJS.mangleSymbolName((<FunctionDeclaration>n).symbol);
       result.params.unshift(self);
       result.body.body.unshift({
@@ -506,19 +508,31 @@ class OutputAsmJS implements StatementVisitor<any>, DeclarationVisitor<any>, Exp
     });
 
     // Then emit all imports
-    if (this.usesIntegerMultiplication) {
-      polyfills = polyfills.concat(esprima.parse([
-        'if (!Math.imul) {',
-        '  Math.imul = function(a, b) {',
-        '    var al = a & 0xFFFF, bl = b & 0xFFFF;',
-        '    return al * bl + ((a >>> 16) * bl + al * (b >>> 16) << 16) | 0;',
-        '  };',
-        '}',
-      ].join('\n')).body);
-      body = body.concat(esprima.parse([
-        'var Math_imul = global.Math.imul;',
-      ].join('\n')).body);
-    }
+    polyfills = polyfills.concat(esprima.parse([
+      'if (!Math.imul) {',
+      '  Math.imul = function(a, b) {',
+      '    var al = a & 0xFFFF, bl = b & 0xFFFF;',
+      '    return al * bl + ((a >>> 16) * bl + al * (b >>> 16) << 16) | 0;',
+      '  };',
+      '}',
+    ].join('\n')).body);
+    body = body.concat(esprima.parse([
+      'var Math$imul = global.Math.imul;',
+      'var Math$cos = global.Math.cos;',
+      'var Math$sin = global.Math.sin;',
+      'var Math$tan = global.Math.tan;',
+      'var Math$acos = global.Math.acos;',
+      'var Math$asin = global.Math.asin;',
+      'var Math$atan = global.Math.atan;',
+      'var Math$atan2 = global.Math.atan2;',
+      'var Math$floor = global.Math.floor;',
+      'var Math$ceil = global.Math.ceil;',
+      'var Math$abs = global.Math.abs;',
+      'var Math$log = global.Math.log;',
+      'var Math$exp = global.Math.exp;',
+      'var Math$sqrt = global.Math.sqrt;',
+      'var Math$pow = global.Math.pow;',
+    ].join('\n')).body);
 
     // Emit imports for external functions
     body = body.concat(externalFunctions.map(n => ({
@@ -535,19 +549,44 @@ class OutputAsmJS implements StatementVisitor<any>, DeclarationVisitor<any>, Exp
       kind: 'var'
     })));
 
+    // // Emit global variables (TODO: only constants)
+    // body = body.concat(varibles.map(n => ({
+    //   type: 'VariableDeclaration',
+    //   declarations: [{
+    //     type: 'VariableDeclarator',
+    //     id: OutputAsmJS.visitIdentifier(n.id),
+    //     init: (n.value !== null ? n.value.acceptExpressionVisitor(this) : OutputAsmJS.defaultValueForType(n.symbol.type)).result
+    //   }],
+    //   kind: 'var'
+    // })));
+
     // TODO: Remove the ones we don't need
     body = body.concat(esprima.parse([
-      'var I32 = new global.Int32Array(heap);',
-      'var F64 = new global.Float64Array(heap);',
-      'var SP = foreign.initialStackPointer | 0;',
+      'var $I32 = new global.Int32Array(heap);',
+      'var $F64 = new global.Float64Array(heap);',
+      'var $heapSize = foreign.heapSize | 0;',
     ].join('\n')).body);
 
-    // TODO
+    // Standard library
     body = body.concat(esprima.parse([
       'function malloc(bytes) {',
       '  bytes = bytes | 0;',
-      '  SP = SP - bytes | 0;',
-      '  return SP | 0;',
+      '  bytes = bytes + 7 & ~3; // Round up to a multiple of 8 (the maximum alignment)',
+      '  $heapSize = $heapSize - bytes | 0;',
+      '  return $heapSize | 0;',
+      '}',
+      'function Math$min(a, b) {',
+      '  a = +a;',
+      '  b = +b;',
+      '  return +(a < b ? a : b);',
+      '}',
+      'function Math$max(a, b) {',
+      '  a = +a;',
+      '  b = +b;',
+      '  return +(a > b ? a : b);',
+      '}',
+      'function Math$random() {',
+      '  return 0.0;',
       '}',
     ].join('\n')).body);
 
@@ -568,7 +607,7 @@ class OutputAsmJS implements StatementVisitor<any>, DeclarationVisitor<any>, Exp
             operator: '=',
             left: {
               type: 'MemberExpression',
-              object: { type: 'Identifier', name: 'I32' },
+              object: { type: 'Identifier', name: '$I32' },
               property: { type: 'Literal', value: initialConstantOffset + i },
               computed: true
             },
@@ -621,22 +660,27 @@ class OutputAsmJS implements StatementVisitor<any>, DeclarationVisitor<any>, Exp
     });
 
     // Wrap the body in an asm.js module
-    return {
-      type: 'Program',
-      body: polyfills.concat({
-        type: 'FunctionDeclaration',
-        params: [
-          { type: 'Identifier', name: 'global' },
-          { type: 'Identifier', name: 'foreign' },
-          { type: 'Identifier', name: 'heap' }
-        ],
-        id: { type: 'Identifier', name: moduleName },
-        body: {
-          type: 'BlockStatement',
-          body: body
-        }
-      })
+    var wrapper = esprima.parse([
+      'function wrapper(global, foreign, heap) {',
+      '  var asm = null(global, foreign, heap);',
+      '  asm.$init();',
+      '  return asm;',
+      '}',
+    ].join('\n'));
+    wrapper.body[0].id.name = moduleName;
+    wrapper.body[0].body.body[0].declarations[0].init.callee = {
+      type: 'FunctionExpression',
+      params: [
+        { type: 'Identifier', name: 'global' },
+        { type: 'Identifier', name: 'foreign' },
+        { type: 'Identifier', name: 'heap' }
+      ],
+      body: {
+        type: 'BlockStatement',
+        body: body
+      }
     };
+    return wrapper;
   }
 
   visitBlock(node: Block): any {
@@ -781,7 +825,7 @@ class OutputAsmJS implements StatementVisitor<any>, DeclarationVisitor<any>, Exp
   visitSymbolExpression(node: SymbolExpression): AsmJSPair {
     // Access object fields off of "this"
     if (node.symbol.enclosingObject !== null) {
-      return OutputAsmJS.dereferenceSymbolMemory(new AsmJSPair(AsmJSType.INT, { type: 'Identifier', name: 'self' }), node.symbol);
+      return OutputAsmJS.dereferenceSymbolMemory(new AsmJSPair(AsmJSType.INT, { type: 'Identifier', name: OutputAsmJS.NAME_FOR_THIS }), node.symbol);
     }
 
     return new AsmJSPair(OutputAsmJS.typeToAsmJSType(node.computedType), {
@@ -887,9 +931,8 @@ class OutputAsmJS implements StatementVisitor<any>, DeclarationVisitor<any>, Exp
     case '*':
       // Special-case integer multiplication
       if (!node.computedType.isDouble()) {
-        var Math_imul: AsmJSPair = new AsmJSPair(AsmJSType.UNKNOWN, { type: 'Identifier', name: 'Math_imul' });
-        this.usesIntegerMultiplication = true;
-        return OutputAsmJS.generateCallExpression(Math_imul, [
+        var Math$imul: AsmJSPair = new AsmJSPair(AsmJSType.UNKNOWN, { type: 'Identifier', name: 'Math$imul' });
+        return OutputAsmJS.generateCallExpression(Math$imul, [
           OutputAsmJS.wrapWithTypeAnnotation(left, AsmJSType.INT),
           OutputAsmJS.wrapWithTypeAnnotation(right, AsmJSType.INT)],
           AsmJSType.INT);
@@ -938,6 +981,26 @@ class OutputAsmJS implements StatementVisitor<any>, DeclarationVisitor<any>, Exp
   }
 
   visitMemberExpression(node: MemberExpression): AsmJSPair {
+    if (node.value.computedType.innerType === NativeTypes.MATH) {
+      switch (node.symbol.name) {
+      case 'E': return OutputAsmJS.doubleValue(Math.E);
+      case 'PI': return OutputAsmJS.doubleValue(Math.PI);
+      case 'NAN': return new AsmJSPair(AsmJSType.DOUBLE, {
+        type: 'BinaryExpression',
+        operator: '/',
+        left: { type: 'Literal', raw: '0.0', value: 0 },
+        right: { type: 'Literal', raw: '0.0', value: 0 }
+      });
+      case 'INFINITY': return new AsmJSPair(AsmJSType.DOUBLE, {
+        type: 'BinaryExpression',
+        operator: '/',
+        left: { type: 'Literal', raw: '1.0', value: 0 },
+        right: { type: 'Literal', raw: '0.0', value: 0 }
+      });
+      default: assert(false);
+      }
+    }
+
     return OutputAsmJS.dereferenceSymbolMemory(
       node.value.acceptExpressionVisitor(this),
       node.symbol);
@@ -962,19 +1025,23 @@ class OutputAsmJS implements StatementVisitor<any>, DeclarationVisitor<any>, Exp
   visitThisExpression(node: ThisExpression): AsmJSPair {
     return new AsmJSPair(AsmJSType.INT, {
       type: 'Identifier',
-      name: 'self'
+      name: OutputAsmJS.NAME_FOR_THIS
     });
   }
 
-  // Need to wrap calls with the return type because otherwise asm.js assumes
-  // void. We can't wrap it with DOUBLE or INT because we always need a cast,
-  // so we wrap it with the special RETURN_DOUBLE or RETURN_INT types instead.
+  // Need to wrap calls with the return type because otherwise asm.js assumes void
   static generateCallExpression(callee: AsmJSPair, args: AsmJSPair[], result: AsmJSType): AsmJSPair {
-    return new AsmJSPair(result === AsmJSType.DOUBLE ? AsmJSType.RETURN_DOUBLE : AsmJSType.RETURN_INT, {
+    // Now need to explicitly annotate return types for all call sites?
+    // Otherwise the validator says "asm.js type error: non-expression-
+    // statement call must be coerced" even for expression statement calls.
+    var thing: any = {
       type: 'CallExpression',
       callee: callee.result,
       arguments: args.map(p => p.result)
-    });
+    };
+    return result === AsmJSType.VOID ? new AsmJSPair(result, thing) :
+      OutputAsmJS.wrapWithTypeAnnotation(new AsmJSPair(AsmJSType.EXTERN, thing),
+        result === AsmJSType.DOUBLE ? AsmJSType.DOUBLE : AsmJSType.SIGNED);
   }
 
   visitCallExpression(node: CallExpression): AsmJSPair {
@@ -993,6 +1060,13 @@ class OutputAsmJS implements StatementVisitor<any>, DeclarationVisitor<any>, Exp
     if (node.value instanceof MemberExpression) {
       var member = <MemberExpression>node.value;
       args.unshift(OutputAsmJS.wrapWithTypeAnnotation(member.value.acceptExpressionVisitor(this), AsmJSType.INT));
+
+      // Special-case math functions
+      if (member.value.computedType.innerType === NativeTypes.MATH) {
+        var callee: AsmJSPair = new AsmJSPair(AsmJSType.DOUBLE, { type: 'Identifier', name: 'Math$' + member.symbol.name });
+        args.shift();
+        return OutputAsmJS.generateCallExpression(callee, args, resultType);
+      }
 
       // Special-case a vtable call
       if (OutputAsmJS.isVirtualSymbol(member.symbol)) {

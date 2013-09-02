@@ -13,8 +13,7 @@ document.write('Output from normal JavaScript:<br>' + values.join(', ') + '<p>')
 var values = [];
 var output = function(value) { values.push(value); };
 var heap = new Int32Array(0x1000);
-var module = vtables_asm_js(this, { output: output, initialStackPointer: heap.byteLength }, heap.buffer);
-module.$init();
+var module = vtables_asm_js(this, { output: output, heapSize: heap.byteLength }, heap.buffer);
 module.main();
 document.write('Output from asm.js:<br>' + values.join(', ') + '<p>');
 

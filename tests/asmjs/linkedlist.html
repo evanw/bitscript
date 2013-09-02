@@ -18,7 +18,7 @@ document.write('Time for normal JavaScript: ' + ((now() - start) / count).toFixe
 <script>
 
 var heap = new Int32Array(0x1000000);
-var main = linkedlist_asm_js(this, { initialStackPointer: heap.byteLength }, heap.buffer).main;
+var main = linkedlist_asm_js(this, { heapSize: heap.byteLength }, heap.buffer).main;
 var count = 3;
 var start = now();
 for (var i = 0; i < count; i++) main();
