@@ -10,6 +10,7 @@ class Symbol {
   overriddenSymbol: Symbol = null;
   isOverridden: boolean = false;
   isAbstract: boolean = false;
+  isArgument: boolean = false;
 
   // This means the byte offset in the object for object fields and the
   // byte offset in the object's vtable for virtual member functions.

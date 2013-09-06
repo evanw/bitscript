@@ -19,7 +19,7 @@ function tokenize(log: Log, source: Source): Token[] {
   var keywords: string[] = [
     'if', 'else', 'while', 'for', 'continue', 'break', 'return',
     'class', 'true', 'false', 'null', 'new', 'this', 'move',
-    'owned', 'shared', 'over',
+    'owned', 'ref', 'over',
   ];
 
   // Regular expressions for tokenizing
@@ -104,7 +104,7 @@ nextToken:
 
       // Stop parsing a type if we find a token that no type expression uses
       if (top.kind === '<' && token.kind !== '<' && token.kind[0] !== '>' && token.kind !== 'IDENTIFIER' &&
-          token.kind !== ',' && token.kind !== 'owned' && token.kind !== 'shared') {
+          token.kind !== ',' && token.kind !== 'owned' && token.kind !== 'ref') {
         tokenStack.pop();
         indexStack.pop();
       } else {

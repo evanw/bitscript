@@ -1,10 +1,13 @@
+enum TypeKind {
+  REF, // Is this a raw pointer?
+  OWNED, // Is this a unique pointer?
+  VALUE, // Is this a value type (is this copied on assignment)?
+}
+
 enum TypeModifier {
-  OWNED = 1, // Is a unique pointer
-  SHARED = 2, // Is a reference-counted pointer
-  STORAGE = 4, // Can this be stored to (is this an L-value)?
-  INSTANCE = 8, // Is this an instance of the type instead of the type itself?
-  UNOWNED = 16, // Should this type parameter be stripped of OWNED here?
-  UNSHARED = 32, // Should this type parameter be stripped of SHARED here?
+  STORAGE = 1, // Can this be stored to (is this an L-value)?
+  INSTANCE = 2, // Is this an instance of the type instead of the type itself?
+  UNOWNED = 4, // Should this type parameter be stripped of OWNED here?
 }
 
 class Type {
@@ -15,8 +18,28 @@ class Type {
     public byteSize: number) {
   }
 
-  wrap(modifiers: number): WrappedType {
-    return new WrappedType(this, modifiers, []);
+  wrapRef(): WrappedType {
+    return new WrappedType(TypeKind.REF, this, TypeModifier.INSTANCE, []);
+  }
+
+  wrapOwned(): WrappedType {
+    return new WrappedType(TypeKind.OWNED, this, TypeModifier.INSTANCE, []);
+  }
+
+  wrapValue(): WrappedType {
+    return new WrappedType(TypeKind.VALUE, this, TypeModifier.INSTANCE, []);
+  }
+
+  wrapRefType(): WrappedType {
+    return new WrappedType(TypeKind.REF, this, 0, []);
+  }
+
+  wrapOwnedType(): WrappedType {
+    return new WrappedType(TypeKind.OWNED, this, 0, []);
+  }
+
+  wrapValueType(): WrappedType {
+    return new WrappedType(TypeKind.VALUE, this, 0, []);
   }
 
   asString(): string {
@@ -53,7 +76,7 @@ class FunctionType extends Type {
   }
 
   asString(): string {
-    return this.result.asString() + ' function(' + this.args.map(t => t.asString()).join(', ') + ')';
+    return 'Function<' + this.args.concat(this.result).map(t => t.asString()).join(', ') + '>';
   }
 }
 
@@ -132,6 +155,7 @@ class Substitution {
 
 class WrappedType {
   constructor(
+    public kind: TypeKind,
     public innerType: Type,
     public modifiers: number,
     public substitutions: Substitution[]) {
@@ -139,11 +163,15 @@ class WrappedType {
   }
 
   isOwned(): boolean {
-    return (this.modifiers & TypeModifier.OWNED) !== 0;
+    return this.kind === TypeKind.OWNED;
   }
 
-  isShared(): boolean {
-    return (this.modifiers & TypeModifier.SHARED) !== 0;
+  isRef(): boolean {
+    return this.kind === TypeKind.REF;
+  }
+
+  isValue(): boolean {
+    return this.kind === TypeKind.VALUE;
   }
 
   isStorage(): boolean {
@@ -158,16 +186,8 @@ class WrappedType {
     return (this.modifiers & TypeModifier.UNOWNED) !== 0;
   }
 
-  isUnshared(): boolean {
-    return (this.modifiers & TypeModifier.UNSHARED) !== 0;
-  }
-
   isPointer(): boolean {
-    return this.isObject() || this.isNull();
-  }
-
-  isRawPointer(): boolean {
-    return this.isPointer() && !this.isOwned() && !this.isShared();
+    return this.isRef() || this.isOwned() || this.isNull();
   }
 
   isError(): boolean {
@@ -228,8 +248,8 @@ class WrappedType {
 
   asString(): string {
     return (
-      (this.modifiers & TypeModifier.OWNED ? 'owned ' : '') +
-      (this.modifiers & TypeModifier.SHARED ? 'shared ' : '') +
+      (this.isOwned() ? 'owned ' : '') +
+      (this.isRef() ? 'ref ' : '') +
       this.innerType.asString() +
       (this.substitutions.length > 0 ? '<' + TypeLogic.filterSubstitutionsForType(
         this.substitutions, this.innerType).map(s => s.type.asString()).join(', ') + '>' : '')
@@ -237,14 +257,18 @@ class WrappedType {
   }
 
   toString(): string {
-    return (this.modifiers & TypeModifier.INSTANCE ? (this.isPointer() ? 'pointer' : 'value') + ' of type ' : 'type ') + this.asString();
+    return (this.isInstance() ? (this.isPointer() ? 'pointer' : 'value') + ' of type ' : 'type ') + this.asString();
   }
 
-  wrapWith(flag: number): WrappedType {
-    return new WrappedType(this.innerType, this.modifiers | flag, this.substitutions);
+  withKind(kind: TypeKind): WrappedType {
+    return new WrappedType(kind, this.innerType, this.modifiers, this.substitutions);
   }
 
-  wrapWithout(flag: number): WrappedType {
-    return new WrappedType(this.innerType, this.modifiers & ~flag, this.substitutions);
+  withModifier(flag: number): WrappedType {
+    return new WrappedType(this.kind, this.innerType, this.modifiers | flag, this.substitutions);
+  }
+
+  withoutModifier(flag: number): WrappedType {
+    return new WrappedType(this.kind, this.innerType, this.modifiers & ~flag, this.substitutions);
   }
 }

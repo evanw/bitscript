@@ -71,13 +71,13 @@ class Initializer implements DeclarationVisitor<WrappedType> {
       // Avoid reporting further errors
       var baseType: WrappedType = node.base.computedType;
       if (baseType.isError()) {
-        return SpecialType.ERROR.wrap(0);
+        return SpecialType.ERROR.wrapValue();
       }
 
       // Can only inherit from objects
       if (!baseType.isObject() || baseType.asObject().isSealed) {
         semanticErrorBadBaseType(this.resolver.log, node.base.range, baseType);
-        return SpecialType.ERROR.wrap(0);
+        return SpecialType.ERROR.wrapValue();
       }
 
       // Base type is valid (no need to check for cycles since
@@ -119,7 +119,10 @@ class Initializer implements DeclarationVisitor<WrappedType> {
       type._constructorType = new FunctionType(null, baseArgTypes.concat(argTypes));
     };
 
-    return type.wrap(0);
+    // TODO: A type is invalid if it contains, directly or indirectly,
+    // infinite storage due to containing a value of itself
+
+    return type.wrapValueType();
   }
 
   visitFunctionDeclaration(node: FunctionDeclaration): WrappedType {
@@ -139,16 +142,17 @@ class Initializer implements DeclarationVisitor<WrappedType> {
     var args: WrappedType[] = node.args.map(n => {
       this.resolver.define(n);
       this.resolver.ensureDeclarationIsInitialized(n);
-      return n.symbol.type.wrapWith(TypeModifier.INSTANCE);
+      n.symbol.isArgument = true;
+      return n.symbol.type.withModifier(TypeModifier.INSTANCE);
     });
     this.resolver.popContext();
 
     // Avoid reporting further errors
     if (node.result.computedType.isError() || args.some(t => t.isError())) {
-      return SpecialType.ERROR.wrap(0);
+      return SpecialType.ERROR.wrapValue();
     }
 
-    return new FunctionType(node.result.computedType.wrapWith(TypeModifier.INSTANCE), args).wrap(TypeModifier.INSTANCE | TypeModifier.STORAGE);
+    return new FunctionType(node.result.computedType.withModifier(TypeModifier.INSTANCE), args).wrapRef().withModifier(TypeModifier.STORAGE);
   }
 
   visitVariableDeclaration(node: VariableDeclaration): WrappedType {
@@ -158,13 +162,16 @@ class Initializer implements DeclarationVisitor<WrappedType> {
     // Resolve the type
     this.resolver.resolveAsParameterizedType(node.type);
 
-    // Cannot make variables of type void
-    if (node.type.computedType.isVoid()) {
+    // Validate variable type
+    if (node.type.computedType.isVoid() || node.type.computedType.isValue() && node.type.computedType.isObject() && node.type.computedType.asObject().isAbstract()) {
       semanticErrorBadVariableType(this.resolver.log, node.type.range, node.type.computedType);
-      return SpecialType.ERROR.wrap(0);
+      return SpecialType.ERROR.wrapValue();
     }
 
-    return node.type.computedType.wrapWith(TypeModifier.INSTANCE | TypeModifier.STORAGE);
+    // TODO: Cannot make variables with value types if the object cannot have
+    // a copy constructor due to member variables of owned pointer type
+
+    return node.type.computedType.withModifier(TypeModifier.INSTANCE | TypeModifier.STORAGE);
   }
 }
 
@@ -203,12 +210,12 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
 
   static createGlobalScope(): Scope {
     var scope: Scope = new Scope(null);
-    scope.define('int', SpecialType.INT.wrap(0));
-    scope.define('void', SpecialType.VOID.wrap(0));
-    scope.define('bool', SpecialType.BOOL.wrap(0));
-    scope.define('double', SpecialType.DOUBLE.wrap(0));
-    scope.define('Math', NativeTypes.MATH.wrap(TypeModifier.INSTANCE));
-    scope.define('List', NativeTypes.LIST.wrap(0));
+    scope.define('int', SpecialType.INT.wrapValueType());
+    scope.define('void', SpecialType.VOID.wrapValueType());
+    scope.define('bool', SpecialType.BOOL.wrapValueType());
+    scope.define('double', SpecialType.DOUBLE.wrapValueType());
+    scope.define('Math', NativeTypes.MATH.wrapValue());
+    scope.define('List', NativeTypes.LIST.wrapValueType());
     return scope;
   }
 
@@ -225,7 +232,7 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
   resolve(node: Expression) {
     // Only resolve once
     if (node.computedType === null) {
-      node.computedType = SpecialType.ERROR.wrap(0);
+      node.computedType = SpecialType.ERROR.wrapValue();
       node.acceptExpressionVisitor(this);
     }
   }
@@ -240,7 +247,7 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
     // Must be an instance
     if (!node.computedType.isError() && !node.computedType.isInstance()) {
       semanticErrorUnexpectedExpression(this.log, node.range, node.computedType);
-      node.computedType = SpecialType.ERROR.wrap(0);
+      node.computedType = SpecialType.ERROR.wrapValue();
     }
   }
 
@@ -254,7 +261,7 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
     // Must not be an instance
     if (!node.computedType.isError() && node.computedType.isInstance()) {
       semanticErrorUnexpectedExpression(this.log, node.range, node.computedType);
-      node.computedType = SpecialType.ERROR.wrap(0);
+      node.computedType = SpecialType.ERROR.wrapValue();
     }
   }
 
@@ -268,7 +275,7 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
     // Must be parameterized
     if (TypeLogic.hasTypeParameters(node.computedType) && !TypeLogic.isParameterized(node.computedType)) {
       semanticErrorUnparameterizedExpression(this.log, node.range, node.computedType);
-      node.computedType = SpecialType.ERROR.wrap(0);
+      node.computedType = SpecialType.ERROR.wrapValue();
     }
   }
 
@@ -282,7 +289,7 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
     // Must be parameterized
     if (TypeLogic.hasTypeParameters(node.computedType) && TypeLogic.isParameterized(node.computedType)) {
       semanticErrorParameterizedExpression(this.log, node.range, node.computedType);
-      node.computedType = SpecialType.ERROR.wrap(0);
+      node.computedType = SpecialType.ERROR.wrapValue();
     }
   }
 
@@ -380,9 +387,9 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
     });
   }
 
-  checkRValueToRawPointer(type: WrappedType, node: Expression) {
-    if (!node.computedType.isError() && type.isRawPointer() && node.computedType.isOwned() && !node.computedType.isStorage()) {
-      semanticErrorRValueToRawPointer(this.log, node.range);
+  checkRValueToRef(type: WrappedType, node: Expression) {
+    if (!node.computedType.isError() && type.isRef() && node.computedType.isOwned() && !node.computedType.isStorage()) {
+      semanticErrorRValueToRef(this.log, node.range);
     }
   }
 
@@ -403,7 +410,7 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
     // of the declaration's initialization. This way we can detect cycles
     // that try to use the symbol in its own type, such as 'foo foo;'. The
     // declaration should return SpecialType.ERROR in this case.
-    node.symbol.type = SpecialType.CIRCULAR.wrap(0);
+    node.symbol.type = SpecialType.CIRCULAR.wrapValue();
     this.pushContext(this.definitionContext[node.uniqueID]);
     var type: WrappedType = node.acceptDeclarationVisitor(this.initializer);
     this.popContext();
@@ -445,7 +452,7 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
 
     // Validate the symbol type
     if (!TypeLogic.isValidOverride(node.symbol.type, symbol.type)) {
-      semanticErrorOverrideDifferentTypes(this.log, node.id.range, node.id.name, symbol.type, node.symbol.type);
+      semanticErrorOverrideDifferentTypes(this.log, node.id.range, node.id.name, symbol.type.innerType.wrapValue(), node.symbol.type.innerType.wrapValue());
       return;
     }
 
@@ -473,7 +480,7 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
     // Detect cyclic symbol references such as 'foo foo;'
     if (symbol.type.isCircular()) {
       semanticErrorCircularType(this.log, range);
-      symbol.type = SpecialType.ERROR.wrap(0);
+      symbol.type = SpecialType.ERROR.wrapValue();
     }
 
     return symbol;
@@ -536,7 +543,7 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
     }
 
     this.resolveAsExpression(node.test);
-    this.checkImplicitCast(SpecialType.BOOL.wrap(TypeModifier.INSTANCE), node.test);
+    this.checkImplicitCast(SpecialType.BOOL.wrapValue(), node.test);
     this.visitBlock(node.thenBlock);
     if (node.elseBlock !== null) {
       this.visitBlock(node.elseBlock);
@@ -550,7 +557,7 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
     }
 
     this.resolveAsExpression(node.test);
-    this.checkImplicitCast(SpecialType.BOOL.wrap(TypeModifier.INSTANCE), node.test);
+    this.checkImplicitCast(SpecialType.BOOL.wrapValue(), node.test);
     this.pushContext(this.context.cloneForLoop());
     this.visitBlock(node.block);
     this.popContext();
@@ -567,7 +574,7 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
     }
     if (node.test !== null) {
       this.resolveAsExpression(node.test);
-      this.checkImplicitCast(SpecialType.BOOL.wrap(TypeModifier.INSTANCE), node.test);
+      this.checkImplicitCast(SpecialType.BOOL.wrapValue(), node.test);
     }
     if (node.update !== null) {
       this.resolveAsExpression(node.update);
@@ -587,7 +594,7 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
     if (node.value !== null) {
       this.resolveAsExpression(node.value);
       this.checkImplicitCast(returnType, node.value);
-      this.checkRValueToRawPointer(returnType, node.value);
+      this.checkRValueToRef(returnType, node.value);
     } else if (!returnType.isVoid()) {
       semanticErrorExpectedReturnValue(this.log, node.range, returnType);
     }
@@ -631,7 +638,7 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
 
     this.ensureDeclarationIsInitialized(node);
     node.args.forEach(n => n.acceptDeclarationVisitor(this));
-    if (node.block !== null) {
+    if (node.block !== null && node.symbol.type.isFunction()) {
       this.pushContext(this.context.cloneForFunction(node.symbol.type.asFunction()));
       this.visitBlock(node.block);
       this.popContext();
@@ -645,7 +652,16 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
     if (node.value !== null) {
       this.resolveAsExpression(node.value);
       this.checkImplicitCast(node.symbol.type, node.value);
-      this.checkRValueToRawPointer(node.symbol.type, node.value);
+      this.checkRValueToRef(node.symbol.type, node.value);
+    }
+
+    // Value types must be constructable with no arguments
+    else if (node.type.computedType.isObject() && node.type.computedType.isValue() &&
+        !node.symbol.isArgument && node.symbol.enclosingObject === null) {
+      var objectType: ObjectType = node.type.computedType.asObject();
+      if (objectType.constructorType().args.length > 0) {
+        semanticErrorVariableNeedsValue(this.log, node.id.range, node.type.computedType);
+      }
     }
   }
 
@@ -680,7 +696,7 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
       this.checkSymbolExpression(<SymbolExpression>node.value, IsPointerMove.YES);
     }
 
-    node.computedType = value.wrapWithout(TypeModifier.STORAGE);
+    node.computedType = value.withoutModifier(TypeModifier.STORAGE);
   }
 
   visitUnaryExpression(node: UnaryExpression) {
@@ -716,7 +732,7 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
 
       // Don't use value because it may have modifiers in it (like TypeModifier.STORAGE)
       if (found) {
-        node.computedType = value.innerType.wrap(TypeModifier.INSTANCE);
+        node.computedType = value.innerType.wrapValue();
         return;
       }
     }
@@ -738,7 +754,7 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
     // Special-case assignment logic
     if (node.isAssignment()) {
       this.checkImplicitCast(left, node.right);
-      this.checkRValueToRawPointer(left, node.right);
+      this.checkRValueToRef(left, node.right);
       this.checkStorage(node.left);
       node.computedType = left;
       return;
@@ -746,7 +762,7 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
 
     // Handle equality separately
     if ((node.op === '==' || node.op === '!=') && (TypeLogic.canImplicitlyConvert(left, right) || TypeLogic.canImplicitlyConvert(right, left))) {
-      node.computedType = SpecialType.BOOL.wrap(TypeModifier.INSTANCE);
+      node.computedType = SpecialType.BOOL.wrapValue();
       return;
     }
 
@@ -795,7 +811,7 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
       }
 
       if (result !== null) {
-        node.computedType = result.wrap(TypeModifier.INSTANCE);
+        node.computedType = result.wrapValue();
         return;
       }
     }
@@ -805,7 +821,7 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
 
   visitTernaryExpression(node: TernaryExpression) {
     this.resolveAsExpression(node.value);
-    this.checkImplicitCast(SpecialType.BOOL.wrap(TypeModifier.INSTANCE), node.value);
+    this.checkImplicitCast(SpecialType.BOOL.wrapValue(), node.value);
     this.resolveAsExpression(node.trueValue);
     this.resolveAsExpression(node.falseValue);
 
@@ -824,8 +840,8 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
     }
 
     // Prevent immediate deletion
-    this.checkRValueToRawPointer(commonType, node.trueValue);
-    this.checkRValueToRawPointer(commonType, node.falseValue);
+    this.checkRValueToRef(commonType, node.trueValue);
+    this.checkRValueToRef(commonType, node.falseValue);
 
     node.computedType = commonType;
   }
@@ -862,19 +878,19 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
   }
 
   visitIntExpression(node: IntExpression) {
-    node.computedType = SpecialType.INT.wrap(TypeModifier.INSTANCE);
+    node.computedType = SpecialType.INT.wrapValue();
   }
 
   visitBoolExpression(node: BoolExpression) {
-    node.computedType = SpecialType.BOOL.wrap(TypeModifier.INSTANCE);
+    node.computedType = SpecialType.BOOL.wrapValue();
   }
 
   visitDoubleExpression(node: DoubleExpression) {
-    node.computedType = SpecialType.DOUBLE.wrap(TypeModifier.INSTANCE);
+    node.computedType = SpecialType.DOUBLE.wrapValue();
   }
 
   visitNullExpression(node: NullExpression) {
-    node.computedType = SpecialType.NULL.wrap(TypeModifier.INSTANCE);
+    node.computedType = SpecialType.NULL.wrapValue();
   }
 
   visitThisExpression(node: ThisExpression) {
@@ -883,7 +899,7 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
       return;
     }
 
-    node.computedType = this.context.enclosingObject.wrap(TypeModifier.INSTANCE);
+    node.computedType = this.context.enclosingObject.wrapRef();
   }
 
   visitCallExpression(node: CallExpression) {
@@ -915,9 +931,9 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
       return;
     }
 
-    // New only works on raw object types
+    // New only works on object types without modifiers (which are value types for now)
     var objectType: ObjectType = node.type.computedType.asObject();
-    if (objectType === null || !node.type.computedType.isRawPointer()) {
+    if (objectType === null || !node.type.computedType.isValue()) {
       semanticErrorInvalidNew(this.log, node.type.range, node.type.computedType);
       return;
     }
@@ -929,10 +945,10 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
     }
 
     this.checkCallArguments(node.range, objectType.constructorType(), node.args);
-    node.computedType = node.type.computedType.wrapWith(TypeModifier.INSTANCE | TypeModifier.OWNED);
+    node.computedType = node.type.computedType.withKind(TypeKind.OWNED).withModifier(TypeModifier.INSTANCE);
   }
 
-  visitTypeModifierExpression(node: TypeModifierExpression) {
+  visitTypeKindExpression(node: TypeKindExpression) {
     this.resolveAsParameterizedType(node.type);
 
     // Avoid reporting further errors
@@ -940,20 +956,13 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
       return;
     }
 
-    // Cannot use both owned and shared
-    var all: number = node.modifiers & (TypeModifier.OWNED | TypeModifier.SHARED);
-    if (all !== TypeModifier.OWNED && all !== TypeModifier.SHARED) {
-      semanticErrorPointerModifierConflict(this.log, node.range);
+    // Can only use owned and ref on object types
+    if (node.kind !== TypeKind.VALUE && !node.type.computedType.isObject()) {
+      semanticErrorInvalidPointerKind(this.log, node.range, node.type.computedType);
       return;
     }
 
-    // Can only use owned and shared on object types
-    if (all !== 0 && !node.type.computedType.isObject()) {
-      semanticErrorInvalidPointerModifier(this.log, node.range, node.type.computedType);
-      return;
-    }
-
-    node.computedType = node.type.computedType.wrapWith(node.modifiers);
+    node.computedType = node.type.computedType.withKind(node.kind);
   }
 
   visitTypeParameterExpression(node: TypeParameterExpression) {
@@ -978,10 +987,10 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
       return;
     }
 
-    // Only allow object types since null can convert to and from type parameters
+    // Disallow bad type parameter types
     for (var i = 0; i < node.parameters.length; i++) {
       var n: Expression = node.parameters[i];
-      if (!n.computedType.isObject()) {
+      if (n.computedType.isVoid()) {
         semanticErrorBadParameter(this.log, n.range, n.computedType);
         return;
       }

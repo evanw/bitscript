@@ -290,7 +290,7 @@ interface ExpressionVisitor<T> {
   visitThisExpression(node: ThisExpression): T;
   visitCallExpression(node: CallExpression): T;
   visitNewExpression(node: NewExpression): T;
-  visitTypeModifierExpression(node: TypeModifierExpression): T;
+  visitTypeKindExpression(node: TypeKindExpression): T;
   visitTypeParameterExpression(node: TypeParameterExpression): T;
 }
 
@@ -478,16 +478,16 @@ class NewExpression extends Expression {
   }
 }
 
-class TypeModifierExpression extends Expression {
+class TypeKindExpression extends Expression {
   constructor(
     range: SourceRange,
     public type: Expression,
-    public modifiers: number) {
+    public kind: TypeKind) {
     super(range);
   }
 
   acceptExpressionVisitor<T>(visitor: ExpressionVisitor<T>): T {
-    return visitor.visitTypeModifierExpression(this);
+    return visitor.visitTypeKindExpression(this);
   }
 }
 

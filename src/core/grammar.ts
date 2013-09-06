@@ -48,21 +48,12 @@ function parseIdentifier(context: ParserContext): Identifier {
 
 function parseType(context: ParserContext): Expression {
   var range: SourceRange = context.current().range;
-
-  // Parse type modifiers
-  var modifiers: number = 0;
-  for (;;) {
-    var token: Token = context.current();
-    var modifier: number = 0;
-    if (context.eat('owned')) modifier = TypeModifier.OWNED;
-    else if (context.eat('shared')) modifier = TypeModifier.SHARED;
-    else break;
-    if (modifiers & modifier) syntaxErrorDuplicateModifier(context.log, token);
-    modifiers |= modifier;
-  }
-
+  var kind: TypeKind =
+    context.eat('owned') ? TypeKind.OWNED :
+    context.eat('ref') ? TypeKind.REF :
+    TypeKind.VALUE;
   var value: Expression = pratt.parse(context, Power.MEMBER - 1); if (value === null) return null;
-  return modifiers !== 0 ? new TypeModifierExpression(context.spanSince(range), value, modifiers) : value;
+  return kind !== TypeKind.VALUE ? new TypeKindExpression(context.spanSince(range), value, kind) : value;
 }
 
 function parseArguments(context: ParserContext): VariableDeclaration[] {
@@ -89,15 +80,7 @@ function parseStatement(context: ParserContext): Statement {
   var range: SourceRange = context.current().range;
 
   // Parse symbol modifiers
-  var modifiers: number = 0;
-  for (;;) {
-    var token: Token = context.current();
-    var modifier: number = 0;
-    if (context.eat('over')) modifier = SymbolModifier.OVER;
-    else break;
-    if (modifiers & modifier) syntaxErrorDuplicateModifier(context.log, token);
-    modifiers |= modifier;
-  }
+  var modifiers: number = context.eat('over') ? SymbolModifier.OVER : 0;
 
   // Object declaration
   if (context.eat('class')) {
@@ -116,7 +99,7 @@ function parseStatement(context: ParserContext): Statement {
   if (modifiers !== 0 ||
       context.peek('IDENTIFIER') ||
       context.peek('owned') ||
-      context.peek('shared')) {
+      context.peek('ref')) {
     var type: Expression = parseType(context); if (type === null) return null;
     if (modifiers === 0 && !context.peek('IDENTIFIER')) {
       var value: Expression = pratt.resume(context, Power.LOWEST, type); if (value === null) return null;

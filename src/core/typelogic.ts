@@ -10,7 +10,7 @@ class TypeLogic {
   }
 
   static equalWrapped(a: WrappedType, b: WrappedType): boolean {
-    return TypeLogic.equal(a.innerType, b.innerType) && a.modifiers === b.modifiers;
+    return TypeLogic.equal(a.innerType, b.innerType) && a.kind === b.kind && a.modifiers === b.modifiers;
   }
 
   static allEqualWrapped(a: WrappedType[], b: WrappedType[]): boolean {
@@ -41,7 +41,8 @@ class TypeLogic {
     if (from.isInt() && to.isDouble()) return true;
     if (from.isNull() && to.isPointer()) return true;
     if (from.isObject() && to.isObject()) {
-      return TypeLogic.isBaseTypeOf(from.asObject(), to.asObject()); // Upcasting is implicit
+      return TypeLogic.isBaseTypeOf(from.asObject(), to.asObject()) && // Upcasting is implicit
+        !to.isValue() || TypeLogic.equal(from.innerType, to.innerType); // Forbid slicing via copy
     }
     return TypeLogic.equal(from.innerType, to.innerType);
   }
@@ -53,10 +54,9 @@ class TypeLogic {
     } else if (to.isPointer()) {
       return true;
     }
-    if (from.isRawPointer() && to.isRawPointer()) return true;
+    if (to.isValue()) return true;
     if (from.isOwned() && to.isPointer()) return true;
-    if (from.isShared() && to.isPointer() && !to.isOwned()) return true;
-    if (from.isPrimitive() && to.isPrimitive()) return true;
+    if ((from.isRef() || from.isValue()) && to.isRef()) return true;
     return false;
   }
 
@@ -66,19 +66,15 @@ class TypeLogic {
   }
 
   static commonImplicitType(a: WrappedType, b: WrappedType): WrappedType {
-    if (TypeLogic.canImplicitlyConvert(a, b)) return b.wrapWithout(TypeModifier.STORAGE);
-    if (TypeLogic.canImplicitlyConvert(b, a)) return a.wrapWithout(TypeModifier.STORAGE);
+    if (TypeLogic.canImplicitlyConvert(a, b)) return b.withoutModifier(TypeModifier.STORAGE);
+    if (TypeLogic.canImplicitlyConvert(b, a)) return a.withoutModifier(TypeModifier.STORAGE);
     if (a.isObject() && b.isObject()) {
       var base: ObjectType = TypeLogic.commonBaseType(a.asObject(), b.asObject());
       if (base !== null) {
-        if (a.isRawPointer() || b.isRawPointer()) {
-          return base.wrap(TypeModifier.INSTANCE);
-        }
-        if (a.isShared() || b.isShared()) {
-          return base.wrap(TypeModifier.INSTANCE | TypeModifier.SHARED);
-        }
-        assert(a.isOwned() && b.isOwned());
-        return base.wrap(TypeModifier.INSTANCE | TypeModifier.OWNED);
+        if (a.isOwned() && b.isOwned()) return base.wrapOwned();
+        if (a.isPointer() || b.isPointer()) return base.wrapRef();
+        assert(a.isValue() && b.isValue());
+        return base.wrapValue();
       }
     }
     return null;
@@ -116,19 +112,14 @@ class TypeLogic {
       for (var i = 0; i < substitutions.length; i++) {
         var sub: Substitution = substitutions[i];
         if (type.innerType === sub.parameter) {
-          var result: WrappedType = sub.type.wrapWith(TypeModifier.INSTANCE);
+          var result: WrappedType = sub.type.withModifier(TypeModifier.INSTANCE);
 
           // Possibly strip owned before returning the substitution. We may need
           // to strip owned to maintain ownership. For example, lists of owned
           // pointers should not relinquish ownership just because they returned
           // a value from a getter.
-          if (type.isUnowned()) {
-            result.modifiers &= ~TypeModifier.OWNED;
-          }
-
-          // Stripping shared may also be useful for performance reasons
-          if (type.isUnshared()) {
-            result.modifiers &= ~TypeModifier.SHARED;
+          if (type.isUnowned() && result.isOwned()) {
+            result.kind = TypeKind.REF;
           }
 
           return result;
@@ -138,7 +129,7 @@ class TypeLogic {
 
     if (type.innerType instanceof FunctionType) {
       var f: FunctionType = type.asFunction();
-      return new WrappedType(new FunctionType(
+      return new WrappedType(type.kind, new FunctionType(
         TypeLogic.substitute(f.result, substitutions),
         f.args.map(t => TypeLogic.substitute(t, substitutions))
       ), type.modifiers, []);
@@ -146,7 +137,7 @@ class TypeLogic {
 
     if (type.innerType instanceof ObjectType) {
       var o: ObjectType = type.asObject();
-      return new WrappedType(o, type.modifiers, TypeLogic.filterSubstitutionsForType(substitutions, o));
+      return new WrappedType(type.kind, o, type.modifiers, TypeLogic.filterSubstitutionsForType(substitutions, o));
     }
 
     return type;

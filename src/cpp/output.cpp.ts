@@ -1,104 +1,14 @@
 class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>, ExpressionVisitor<Object> {
-  needMemoryHeader: boolean = false;
-  needVectorHeader: boolean = false;
-  needMathHeader: boolean = false;
-  needStdlibHeader: boolean = false;
-  needMathRandom: boolean = false;
-  needAlgorithmHeader: boolean = false;
-  needListPop: boolean = false;
-  needListUnshift: boolean = false;
-  needListShift: boolean = false;
-  needListIndexOf: boolean = false;
-  needListInsert: boolean = false;
-  needListRemove: boolean = false;
+  library: LibraryDataCPP = new LibraryDataCPP();
   returnType: WrappedType = null;
 
   static generate(node: Module): string {
     var output: OutputCPP = new OutputCPP();
-    var result: string = cppcodegen.generate(output.visitModule(node), {
+    return cppcodegen.generate(output.visitModule(node), {
       indent: '  ',
       cpp11: true,
       parenthesizeAndInsideOr: true
     }).trim();
-
-    // Cheat for now since I don't feel like writing tons of JSON
-    var listStuff: string = '';
-    if (output.needListPop) {
-      listStuff += [
-        'template <typename T>',
-        'T List_pop(std::vector<T> *list) {',
-        '  T t = std::move(*(list->end() - 1));',
-        '  list->pop_back();',
-        '  return std::move(t);',
-        '}',
-      ].join('\n') + '\n';
-    }
-    if (output.needListUnshift) {
-      listStuff += [
-        'template <typename T>',
-        'void List_unshift(std::vector<T> *list, T t) {',
-        '  list->insert(list->begin(), std::move(t));',
-        '}',
-      ].join('\n') + '\n';
-    }
-    if (output.needListShift) {
-      listStuff += [
-        'template <typename T>',
-        'T List_shift(std::vector<T> *list) {',
-        '  T t = std::move(*list->begin());',
-        '  list->erase(list->begin());',
-        '  return std::move(t);',
-        '}',
-      ].join('\n') + '\n';
-    }
-    if (output.needListIndexOf) {
-      listStuff += [
-        'template <typename T, typename U>',
-        'int List_indexOf(std::vector<std::unique_ptr<T>> *list, U *u) {',
-        '  for (typename std::vector<std::unique_ptr<T>>::iterator i = list->begin(); i != list->end(); i++) {',
-        '    if (i->get() == u) {',
-        '      return i - list->begin();',
-        '    }',
-        '  }',
-        '  return -1;',
-        '}',
-        'template <typename T, typename U>',
-        'int List_indexOf(std::vector<std::shared_ptr<T>> *list, U *u) {',
-        '  for (typename std::vector<std::shared_ptr<T>>::iterator i = list->begin(); i != list->end(); i++) {',
-        '    if (i->get() == u) {',
-        '      return i - list->begin();',
-        '    }',
-        '  }',
-        '  return -1;',
-        '}',
-        'template <typename T, typename U>',
-        'int List_indexOf(std::vector<T *> *list, U *u) {',
-        '  for (typename std::vector<T *>::iterator i = list->begin(); i != list->end(); i++) {',
-        '    if (*i == u) {',
-        '      return i - list->begin();',
-        '    }',
-        '  }',
-        '  return -1;',
-        '}',
-      ].join('\n') + '\n';
-    }
-    if (output.needListInsert) {
-      listStuff += [
-        'template <typename T>',
-        'void List_insert(std::vector<T> *list, int offset, T t) {',
-        '  list->insert(list->begin() + offset, std::move(t));',
-        '}',
-      ].join('\n') + '\n';
-    }
-    if (output.needListRemove) {
-      listStuff += [
-        'template <typename T>',
-        'void List_remove(std::vector<T> *list, int offset) {',
-        '  list->erase(list->begin() + offset);',
-        '}',
-      ].join('\n') + '\n';
-    }
-    return result.replace(/\n(?!#)/, '\n' + listStuff);
   }
 
   defaultForType(type: WrappedType): Object {
@@ -119,6 +29,14 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
       return {
         kind: 'BooleanLiteral',
         value: false
+      };
+    }
+
+    if (type.isValue()) {
+      return {
+        kind: 'CallExpression',
+        callee: this.visitType(type),
+        arguments: []
       };
     }
 
@@ -143,7 +61,7 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
     };
 
     if (objectType === NativeTypes.LIST) {
-      this.needVectorHeader = true;
+      this.library.need(LibraryCPP.VECTOR_HEADER);
       assert(type.substitutions.length === 1);
       assert(type.substitutions[0].parameter === NativeTypes.LIST_T);
       result = {
@@ -157,7 +75,7 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
       };
     }
 
-    if (type.isRawPointer()) {
+    if (type.isRef()) {
       return {
         kind: 'PointerType',
         inner: result
@@ -165,26 +83,13 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
     }
 
     if (type.isOwned()) {
-      this.needMemoryHeader = true;
+      this.library.need(LibraryCPP.MEMORY_HEADER);
       return {
         kind: 'SpecializeTemplate',
         template: {
           kind: 'MemberType',
           inner: { kind: 'Identifier', name: 'std' },
           member: { kind: 'Identifier', name: 'unique_ptr' }
-        },
-        parameters: [result]
-      };
-    }
-
-    if (type.isShared()) {
-      this.needMemoryHeader = true;
-      return {
-        kind: 'SpecializeTemplate',
-        template: {
-          kind: 'MemberType',
-          inner: { kind: 'Identifier', name: 'std' },
-          member: { kind: 'Identifier', name: 'shared_ptr' }
         },
         parameters: [result]
       };
@@ -376,42 +281,23 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
   }
 
   insertImplicitConversion(from: Expression, to: WrappedType): Object {
-    if (from.computedType.isOwned() && to.isShared()) {
-      if (from instanceof NewExpression) {
-        var node: NewExpression = <NewExpression>from;
-        var functionType: FunctionType = node.type.computedType.asObject().constructorType();
-        this.needMemoryHeader = true;
-        return {
-          kind: 'CallExpression',
-          callee: {
-            kind: 'SpecializeTemplate',
-            template: {
-              kind: 'MemberType',
-              inner: { kind: 'Identifier', name: 'std' },
-              member: { kind: 'Identifier', name: 'make_shared' }
-            },
-            parameters: [{ kind: 'Identifier', name: to.asObject().name }]
-          },
-          arguments: node.args.map((n, i) => this.insertImplicitConversion(n, functionType.args[i]))
-        };
-      }
+    if (from.computedType.isValue() && !from.computedType.isNull() && to.isRef()) {
       return {
-        kind: 'CallExpression',
-        callee: this.visitType(to),
-        arguments: [{
-          kind: 'CallExpression',
-          callee: {
-            kind: 'MemberExpression',
-            operator: '.',
-            object: from.acceptExpressionVisitor(this),
-            member: { kind: 'Identifier', name: 'release' }
-          },
-          arguments: []
-        }]
+        kind: 'UnaryExpression',
+        operator: '&',
+        argument: from.acceptExpressionVisitor(this)
       };
     }
 
-    if ((from.computedType.isOwned() || from.computedType.isShared()) && to.isRawPointer()) {
+    if (from.computedType.isRef() && to.isValue()) {
+      return {
+        kind: 'UnaryExpression',
+        operator: '*',
+        argument: from.acceptExpressionVisitor(this)
+      };
+    }
+
+    if (from.computedType.isOwned() && to.isRef()) {
       return {
         kind: 'CallExpression',
         callee: {
@@ -421,6 +307,33 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
           member: { kind: 'Identifier', name: 'get' }
         },
         arguments: []
+      };
+    }
+
+    if (from.computedType.isOwned() && to.isValue()) {
+      if (from instanceof NewExpression) {
+        var node: NewExpression = <NewExpression>from;
+        var functionType: FunctionType = node.type.computedType.asObject().constructorType();
+        return {
+          kind: 'CallExpression',
+          callee: this.visitType(node.type.computedType),
+          arguments: node.args.map((n, i) => this.insertImplicitConversion(n, functionType.args[i]))
+        };
+      }
+
+      return {
+        kind: 'UnaryExpression',
+        operator: '*',
+        argument: {
+          kind: 'CallExpression',
+          callee: {
+            kind: 'MemberExpression',
+            operator: '.',
+            object: from.acceptExpressionVisitor(this),
+            member: { kind: 'Identifier', name: 'get' }
+          },
+          arguments: []
+        }
       };
     }
 
@@ -458,76 +371,7 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
         node.block.functionDeclarationsWithBlocks().map(n => n.acceptStatementVisitor(this)),
       ])
     };
-
-    if (this.needMathRandom) {
-      result.body.unshift({
-        kind: 'FunctionDeclaration',
-        qualifiers: [],
-        type: {
-          kind: 'FunctionType',
-          'return': { kind: 'Identifier', name: 'double' },
-          arguments: []
-        },
-        id: { kind: 'Identifier', name: 'Math_random' },
-        body: {
-          kind: 'BlockStatement',
-          body: [{
-            kind: 'ReturnStatement',
-            argument: {
-              kind: 'BinaryExpression',
-              operator: '/',
-              left: {
-                kind: 'CallExpression',
-                callee: { kind: 'Identifier', name: 'rand' },
-                arguments: []
-              },
-              right: {
-                kind: 'CallExpression',
-                callee: {
-                  kind: 'SpecializeTemplate',
-                  template: { kind: 'Identifier', name: 'static_cast' },
-                  parameters: [{ kind: 'Identifier', name: 'double' }]
-                },
-                arguments: [{ kind: 'Identifier', name: 'RAND_MAX' }]
-              }
-            }
-          }]
-        }
-      });
-    }
-
-    // Include headers as needed
-    if (this.needMemoryHeader) {
-      result.body.unshift({
-        kind: 'IncludeStatement',
-        text: '<memory>'
-      });
-    }
-    if (this.needMathHeader) {
-      result.body.unshift({
-        kind: 'IncludeStatement',
-        text: '<math.h>'
-      });
-    }
-    if (this.needStdlibHeader) {
-      result.body.unshift({
-        kind: 'IncludeStatement',
-        text: '<stdlib.h>'
-      });
-    }
-    if (this.needVectorHeader) {
-      result.body.unshift({
-        kind: 'IncludeStatement',
-        text: '<vector>'
-      });
-    }
-    if (this.needAlgorithmHeader) {
-      result.body.unshift({
-        kind: 'IncludeStatement',
-        text: '<algorithm>'
-      });
-    }
-
+    result.body = this.library.generate().concat(result.body);
     return result;
   }
 
@@ -673,8 +517,8 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
       return {
         kind: 'BinaryExpression',
         operator: node.op,
-        left: this.insertImplicitConversion(node.left, node.left.computedType.wrapWithout(TypeModifier.OWNED | TypeModifier.SHARED)),
-        right: this.insertImplicitConversion(node.right, node.right.computedType.wrapWithout(TypeModifier.OWNED | TypeModifier.SHARED))
+        left: this.insertImplicitConversion(node.left, node.left.computedType.isPrimitive() ? node.left.computedType : node.left.computedType.innerType.wrapRef()),
+        right: this.insertImplicitConversion(node.right, node.right.computedType.isPrimitive() ? node.right.computedType : node.right.computedType.innerType.wrapRef())
       };
     }
 
@@ -696,7 +540,8 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
   }
 
   visitMemberExpression(node: MemberExpression): Object {
-    if (node.value.computedType.innerType === NativeTypes.MATH) {
+    switch (node.value.computedType.innerType) {
+    case NativeTypes.MATH:
       switch (node.id.name) {
         case 'E':
           return {
@@ -719,27 +564,27 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
         case 'asin':
         case 'atan':
         case 'atan2':
+        case 'round':
         case 'floor':
         case 'ceil':
         case 'exp':
         case 'log':
         case 'sqrt':
         case 'pow':
-          this.needMathHeader = true;
+          this.library.need(LibraryCPP.MATH_HEADER);
           return this.visitIdentifier(node.id);
 
         case 'min':
         case 'max':
         case 'abs':
-          this.needMathHeader = true;
+          this.library.need(LibraryCPP.MATH_HEADER);
           return {
             kind: 'Identifier',
             name: 'f' + node.id.name
           };
 
         case 'random':
-          this.needStdlibHeader = true;
-          this.needMathRandom = true;
+          this.library.need(LibraryCPP.MATH_RANDOM);
           return {
             kind: 'Identifier',
             name: 'Math_random'
@@ -748,11 +593,10 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
         default:
           assert(false);
       }
-    }
+      break;
 
-    else if (node.value.computedType.innerType === NativeTypes.LIST) {
+    case NativeTypes.LIST:
       switch (node.symbol) {
-
       case NativeTypes.LIST_LENGTH:
         return {
           kind: 'CallExpression',
@@ -765,7 +609,7 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
             kind: 'CallExpression',
             callee: {
               kind: 'MemberExpression',
-              operator: '->',
+              operator: node.value.computedType.isPointer() ? '->' : '.',
               object: node.value.acceptExpressionVisitor(this),
               member: { kind: 'Identifier', name: 'size' }
             },
@@ -773,6 +617,7 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
           }]
         };
       }
+      break;
     }
 
     return {
@@ -822,15 +667,30 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
 
     if (node.value instanceof MemberExpression) {
       var member: MemberExpression = <MemberExpression>node.value;
-      if (member.value.computedType.innerType === NativeTypes.LIST) {
-        switch (member.symbol) {
 
+      switch (member.value.computedType.innerType) {
+      case NativeTypes.MATH:
+        if (member.symbol.name === 'dtoi') {
+          return {
+            kind: 'CallExpression',
+            callee: {
+              kind: 'SpecializeTemplate',
+              template: { kind: 'Identifier', name: 'static_cast' },
+              parameters: [{ kind: 'Identifier', name: 'int' }]
+            },
+            arguments: args
+          };
+        }
+        break;
+
+      case NativeTypes.LIST:
+        switch (member.symbol) {
         case NativeTypes.LIST_GET:
           assert(args.length === 1);
           var result: Object = {
             kind: 'BinaryExpression',
             operator: '[]',
-            left: {
+            left: member.value.computedType.isValue() ? member.value.acceptExpressionVisitor(this) : {
               kind: 'UnaryExpression',
               operator: '*',
               argument: member.value.acceptExpressionVisitor(this)
@@ -838,7 +698,7 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
             right: args[0]
           };
           assert(member.value.computedType.substitutions.length === 1);
-          if (!member.value.computedType.substitutions[0].type.isRawPointer()) {
+          if (member.value.computedType.substitutions[0].type.isOwned()) {
             return {
               kind: 'CallExpression',
               callee: {
@@ -876,7 +736,7 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
             kind: 'CallExpression',
             callee: {
               kind: 'MemberExpression',
-              operator: '->',
+              operator: member.value.computedType.isPointer() ? '->' : '.',
               object: member.value.acceptExpressionVisitor(this),
               member: { kind: 'Identifier', name: 'push_back' }
             },
@@ -890,23 +750,32 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
         case NativeTypes.LIST_INSERT:
         case NativeTypes.LIST_REMOVE:
           switch (member.symbol) {
-          case NativeTypes.LIST_POP: this.needListPop = true; break;
-          case NativeTypes.LIST_UNSHIFT: this.needListUnshift = true; break;
-          case NativeTypes.LIST_SHIFT: this.needListShift = true; break;
-          case NativeTypes.LIST_INDEX_OF: this.needListIndexOf = this.needAlgorithmHeader = true; break;
-          case NativeTypes.LIST_INSERT: this.needListInsert = true; break;
-          case NativeTypes.LIST_REMOVE: this.needListRemove = true; break;
+          case NativeTypes.LIST_POP: this.library.need(LibraryCPP.LIST_POP); break;
+          case NativeTypes.LIST_UNSHIFT: this.library.need(LibraryCPP.LIST_UNSHIFT); break;
+          case NativeTypes.LIST_SHIFT: this.library.need(LibraryCPP.LIST_SHIFT); break;
+          case NativeTypes.LIST_INSERT: this.library.need(LibraryCPP.LIST_INSERT); break;
+          case NativeTypes.LIST_REMOVE: this.library.need(LibraryCPP.LIST_REMOVE); break;
+          case NativeTypes.LIST_INDEX_OF:
+            this.library.need(LibraryCPP.ALGORITHM_HEADER);
+            switch (member.symbol.type.kind) {
+              case TypeKind.OWNED: this.library.need(LibraryCPP.LIST_INDEXOF_OWNED); break;
+              case TypeKind.REF: this.library.need(LibraryCPP.LIST_INDEXOF_REF); break;
+              case TypeKind.VALUE: this.library.need(LibraryCPP.LIST_INDEXOF_VALUE); break;
+              default: assert(false);
+            }
+            break;
           default: assert(false);
           }
           return {
             kind: 'CallExpression',
             callee: { kind: 'Identifier', name: 'List_' + member.symbol.name },
-            arguments: [this.insertImplicitConversion(member.value, NativeTypes.LIST.wrap(0))].concat(args)
+            arguments: [this.insertImplicitConversion(member.value, NativeTypes.LIST.wrapRef())].concat(args)
           };
 
         default:
           assert(false);
         }
+        break;
       }
     }
 
@@ -919,7 +788,7 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
 
   visitNewExpression(node: NewExpression): Object {
     var functionType: FunctionType = node.type.computedType.asObject().constructorType();
-    this.needMemoryHeader = true;
+    this.library.need(LibraryCPP.MEMORY_HEADER);
     return {
       kind: 'CallExpression',
       callee: {
@@ -929,17 +798,17 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
           inner: { kind: 'Identifier', name: 'std' },
           member: { kind: 'Identifier', name: 'unique_ptr' }
         },
-        parameters: [this.visitType(node.type.computedType).inner]
+        parameters: [this.visitType(node.type.computedType)]
       },
       arguments: [{
         kind: 'NewExpression',
-        callee: this.visitType(node.type.computedType).inner,
+        callee: this.visitType(node.type.computedType),
         arguments: node.args.map((n, i) => this.insertImplicitConversion(n, functionType.args[i]))
       }]
     };
   }
 
-  visitTypeModifierExpression(node: TypeModifierExpression): Object {
+  visitTypeKindExpression(node: TypeKindExpression): Object {
     assert(false);
     return null;
   }

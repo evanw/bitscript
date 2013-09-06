@@ -22,10 +22,6 @@ function syntaxErrorExtraData(log: Log, range: SourceRange, text: string) {
   log.error(range, 'syntax error "' + text + '"');
 }
 
-function syntaxErrorDuplicateModifier(log: Log, token: Token) {
-  log.error(token.range, 'duplicate ' + token.text + ' modifier');
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 // Semantic diagnostics
 ////////////////////////////////////////////////////////////////////////////////
@@ -53,11 +49,7 @@ function semanticErrorUnexpectedExpression(log: Log, range: SourceRange, type: W
   log.error(range, 'unexpected ' + type);
 }
 
-function semanticErrorPointerModifierConflict(log: Log, range: SourceRange) {
-  log.error(range, 'cannot use both owned and shared');
-}
-
-function semanticErrorInvalidPointerModifier(log: Log, range: SourceRange, type: WrappedType) {
+function semanticErrorInvalidPointerKind(log: Log, range: SourceRange, type: WrappedType) {
   log.error(range, 'cannot make a pointer to ' + type);
 }
 
@@ -79,8 +71,8 @@ function semanticErrorArgumentCount(log: Log, range: SourceRange, expected: numb
     ' but found ' + found + ' argument' + (found === 1 ? '' : 's'));
 }
 
-function semanticErrorRValueToRawPointer(log: Log, range: SourceRange) {
-  log.error(range, 'new object will be deleted immediately (store it somewhere with an owned or shared type instead)');
+function semanticErrorRValueToRef(log: Log, range: SourceRange) {
+  log.error(range, 'new object will be deleted immediately (store it in a value or an owned pointer instead)');
 }
 
 function semanticErrorNoMembers(log: Log, range: SourceRange, type: WrappedType) {
@@ -175,4 +167,8 @@ function semanticErrorExpectedMove(log: Log, range: SourceRange, type: WrappedTy
 
 function semanticErrorBadVariableType(log: Log, range: SourceRange, type: WrappedType) {
   log.error(range, 'cannot create variable of ' + type);
+}
+
+function semanticErrorVariableNeedsValue(log: Log, range: SourceRange, type: WrappedType) {
+  log.error(range, 'variable of ' + type + ' must be initialized');
 }

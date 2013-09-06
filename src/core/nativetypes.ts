@@ -13,18 +13,16 @@ class NativeTypes {
   static LIST_INSERT: Symbol;
   static LIST_REMOVE: Symbol;
 
-  static createFunction(result: Type, args: Type[]): WrappedType {
-    return new FunctionType(result.wrap(TypeModifier.INSTANCE), args.map(t => t.wrap(TypeModifier.INSTANCE))).wrap(TypeModifier.INSTANCE);
+  static createFunction(result: SpecialType, args: SpecialType[]): WrappedType {
+    return new FunctionType(result.wrapValue(), args.map(t => t.wrapValue())).wrapRef();
   }
 }
 
 // TODO: Use static functions when those work
-// TODO: Need Math.round()
-// TODO: Need a way to convert from double to int
-NativeTypes.MATH.scope.define('E', SpecialType.DOUBLE.wrap(TypeModifier.INSTANCE));
-NativeTypes.MATH.scope.define('PI', SpecialType.DOUBLE.wrap(TypeModifier.INSTANCE));
-NativeTypes.MATH.scope.define('NAN', SpecialType.DOUBLE.wrap(TypeModifier.INSTANCE));
-NativeTypes.MATH.scope.define('INFINITY', SpecialType.DOUBLE.wrap(TypeModifier.INSTANCE));
+NativeTypes.MATH.scope.define('E', SpecialType.DOUBLE.wrapValue());
+NativeTypes.MATH.scope.define('PI', SpecialType.DOUBLE.wrapValue());
+NativeTypes.MATH.scope.define('NAN', SpecialType.DOUBLE.wrapValue());
+NativeTypes.MATH.scope.define('INFINITY', SpecialType.DOUBLE.wrapValue());
 NativeTypes.MATH.scope.define('cos', NativeTypes.createFunction(SpecialType.DOUBLE, [SpecialType.DOUBLE]));
 NativeTypes.MATH.scope.define('sin', NativeTypes.createFunction(SpecialType.DOUBLE, [SpecialType.DOUBLE]));
 NativeTypes.MATH.scope.define('tan', NativeTypes.createFunction(SpecialType.DOUBLE, [SpecialType.DOUBLE]));
@@ -32,8 +30,9 @@ NativeTypes.MATH.scope.define('acos', NativeTypes.createFunction(SpecialType.DOU
 NativeTypes.MATH.scope.define('asin', NativeTypes.createFunction(SpecialType.DOUBLE, [SpecialType.DOUBLE]));
 NativeTypes.MATH.scope.define('atan', NativeTypes.createFunction(SpecialType.DOUBLE, [SpecialType.DOUBLE]));
 NativeTypes.MATH.scope.define('atan2', NativeTypes.createFunction(SpecialType.DOUBLE, [SpecialType.DOUBLE, SpecialType.DOUBLE]));
-NativeTypes.MATH.scope.define('floor', NativeTypes.createFunction(SpecialType.INT, [SpecialType.DOUBLE]));
-NativeTypes.MATH.scope.define('ceil', NativeTypes.createFunction(SpecialType.INT, [SpecialType.DOUBLE]));
+NativeTypes.MATH.scope.define('round', NativeTypes.createFunction(SpecialType.DOUBLE, [SpecialType.DOUBLE]));
+NativeTypes.MATH.scope.define('floor', NativeTypes.createFunction(SpecialType.DOUBLE, [SpecialType.DOUBLE]));
+NativeTypes.MATH.scope.define('ceil', NativeTypes.createFunction(SpecialType.DOUBLE, [SpecialType.DOUBLE]));
 NativeTypes.MATH.scope.define('abs', NativeTypes.createFunction(SpecialType.DOUBLE, [SpecialType.DOUBLE]));
 NativeTypes.MATH.scope.define('log', NativeTypes.createFunction(SpecialType.DOUBLE, [SpecialType.DOUBLE]));
 NativeTypes.MATH.scope.define('exp', NativeTypes.createFunction(SpecialType.DOUBLE, [SpecialType.DOUBLE]));
@@ -42,6 +41,7 @@ NativeTypes.MATH.scope.define('pow', NativeTypes.createFunction(SpecialType.DOUB
 NativeTypes.MATH.scope.define('min', NativeTypes.createFunction(SpecialType.DOUBLE, [SpecialType.DOUBLE, SpecialType.DOUBLE]));
 NativeTypes.MATH.scope.define('max', NativeTypes.createFunction(SpecialType.DOUBLE, [SpecialType.DOUBLE, SpecialType.DOUBLE]));
 NativeTypes.MATH.scope.define('random', NativeTypes.createFunction(SpecialType.DOUBLE, []));
+NativeTypes.MATH.scope.define('dtoi', NativeTypes.createFunction(SpecialType.INT, [SpecialType.DOUBLE]));
 
 // Lists are special-cased for now
 NativeTypes.LIST.isSealed = true;
@@ -49,7 +49,7 @@ NativeTypes.LIST.byteAlignment = 4;
 NativeTypes.LIST.byteSize = 8;
 NativeTypes.LIST._constructorType = new FunctionType(null, []);
 NativeTypes.LIST.parameters.push(NativeTypes.LIST_T);
-NativeTypes.LIST_LENGTH = NativeTypes.LIST.scope.define('length', SpecialType.INT.wrap(TypeModifier.INSTANCE));
+NativeTypes.LIST_LENGTH = NativeTypes.LIST.scope.define('length', SpecialType.INT.wrapValue());
 NativeTypes.LIST_GET = NativeTypes.LIST.scope.define('get', NativeTypes.createFunction(NativeTypes.LIST_T, [SpecialType.INT]));
 NativeTypes.LIST_SET = NativeTypes.LIST.scope.define('set', NativeTypes.createFunction(SpecialType.VOID, [SpecialType.INT, NativeTypes.LIST_T]));
 NativeTypes.LIST_PUSH = NativeTypes.LIST.scope.define('push', NativeTypes.createFunction(SpecialType.VOID, [NativeTypes.LIST_T]));
@@ -61,5 +61,5 @@ NativeTypes.LIST_INSERT = NativeTypes.LIST.scope.define('insert', NativeTypes.cr
 NativeTypes.LIST_REMOVE = NativeTypes.LIST.scope.define('remove', NativeTypes.createFunction(SpecialType.VOID, [SpecialType.INT]));
 
 // Getting an element from a list of owned pointers should not steal ownership
-NativeTypes.LIST_GET.type.asFunction().result.modifiers |= TypeModifier.UNOWNED | TypeModifier.UNSHARED;
-NativeTypes.LIST_INDEX_OF.type.asFunction().args[0].modifiers |= TypeModifier.UNOWNED | TypeModifier.UNSHARED;
+NativeTypes.LIST_GET.type.asFunction().result.modifiers |= TypeModifier.UNOWNED;
+NativeTypes.LIST_INDEX_OF.type.asFunction().args[0].modifiers |= TypeModifier.UNOWNED;
