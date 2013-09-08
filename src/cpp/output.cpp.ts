@@ -687,7 +687,7 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
 
       switch (member.value.computedType.innerType) {
       case NativeTypes.MATH:
-        if (member.symbol.name === 'dtoi') {
+        if (member.symbol.name === 'trunc') {
           return {
             kind: 'CallExpression',
             callee: {

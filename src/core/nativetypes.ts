@@ -41,7 +41,7 @@ NativeTypes.MATH.scope.define('pow', NativeTypes.createFunction(SpecialType.DOUB
 NativeTypes.MATH.scope.define('min', NativeTypes.createFunction(SpecialType.DOUBLE, [SpecialType.DOUBLE, SpecialType.DOUBLE]));
 NativeTypes.MATH.scope.define('max', NativeTypes.createFunction(SpecialType.DOUBLE, [SpecialType.DOUBLE, SpecialType.DOUBLE]));
 NativeTypes.MATH.scope.define('random', NativeTypes.createFunction(SpecialType.DOUBLE, []));
-NativeTypes.MATH.scope.define('dtoi', NativeTypes.createFunction(SpecialType.INT, [SpecialType.DOUBLE]));
+NativeTypes.MATH.scope.define('trunc', NativeTypes.createFunction(SpecialType.INT, [SpecialType.DOUBLE]));
 
 // Lists are special-cased for now
 NativeTypes.LIST.isSealed = true;

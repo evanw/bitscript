@@ -299,7 +299,7 @@ testCPP([
   '  Math.min(1.5, 2.5);',
   '  Math.max(1.5, 2.5);',
   '  Math.random();',
-  '  Math.dtoi(1.5);',
+  '  Math.trunc(1.5);',
   '  return 0;',
   '}',
 ], [
