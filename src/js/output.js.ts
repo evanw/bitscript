@@ -15,12 +15,6 @@ class OutputJS implements StatementVisitor<Object>, DeclarationVisitor<Object>, 
 
   static generateWithSourceMap(node: Module, root: string): { code: string; map: string } {
     return escodegen.generate(new OutputJS((node, result) => {
-      // Source map support in escodegen is pretty bad. Every single object
-      // that escodegen touches must have a valid location or it puts NaNs in
-      // the map. This unfortunately means that the source map is way too
-      // fine-grained and doesn't accurately represent the source code in
-      // many places. Oh well, it's quick and dirty and better than nothing.
-      // It still seems to generate a few NaNs in between functions :(
       if (node.range !== null) {
         var start = node.range.start;
         var end = node.range.end;
@@ -36,7 +30,6 @@ class OutputJS implements StatementVisitor<Object>, DeclarationVisitor<Object>, 
           }
         };
       }
-
       return result;
     }).visitModule(node), {
       sourceMap: true,
@@ -75,53 +68,53 @@ class OutputJS implements StatementVisitor<Object>, DeclarationVisitor<Object>, 
     return { type: 'Identifier', name: objectType.name + '$copy' };
   }
 
-  insertCopyConstructorCall(node: Expression, result: Object, type: WrappedType): Object {
+  insertCopyConstructorCall(result: Object, type: WrappedType): Object {
     if (type.innerType === NativeTypes.LIST) {
       assert(type.substitutions.length === 1 && type.substitutions[0].parameter === NativeTypes.LIST_T);
 
       if (type.substitutions[0].type.isPrimitive()) {
-        return this.wrap(node, {
+        return {
           type: 'CallExpression',
-          callee: this.wrap(node, {
+          callee: {
             type: 'MemberExpression',
             object: result,
             property: { type: 'Identifier', name: 'slice' }
-          }),
+          },
           arguments: []
-        });
+        };
       }
 
-      return this.wrap(node, {
+      return {
         type: 'CallExpression',
-        callee: this.wrap(node, {
+        callee: {
           type: 'MemberExpression',
           object: result,
           property: { type: 'Identifier', name: 'map' }
-        }),
-        arguments: [this.wrap(node, {
+        },
+        arguments: [{
           type: 'FunctionExpression',
           params: [{ type: 'Identifier', name: 'x' }],
-          body: this.wrap(node, {
+          body: {
             type: 'BlockStatement',
             body: [{
               type: 'ReturnStatement',
-              argument: this.insertCopyConstructorCall(node, { type: 'Identifier', name: 'x' }, type.substitutions[0].type)
+              argument: this.insertCopyConstructorCall({ type: 'Identifier', name: 'x' }, type.substitutions[0].type)
             }]
-          })
-        })]
-      });
+          }
+        }]
+      };
     }
 
-    return this.wrap(node, {
+    return {
       type: 'NewExpression',
       callee: OutputJS.mangledCopyConstructorIdentifier(type.asObject()),
       arguments: [result]
-    });
+    };
   }
 
   insertImplicitConversion(from: Expression, to: WrappedType): Object {
     if (to.isObject() && to.isValue()) {
-      return this.insertCopyConstructorCall(from, from.acceptExpressionVisitor(this), to);
+      return this.insertCopyConstructorCall(from.acceptExpressionVisitor(this), to);
     }
 
     return from.acceptExpressionVisitor(this);
@@ -251,24 +244,22 @@ class OutputJS implements StatementVisitor<Object>, DeclarationVisitor<Object>, 
     // Create the constructor function
     var result: any[] = [this.wrap(node, {
       type: 'FunctionDeclaration',
-      params: baseVariables.concat(variables.filter(n => n.value === null)).map(n => this.visitIdentifier(n.id)),
+      params: baseVariables.concat(variables.filter(n => n.value === null)).map(n => ({ type: 'Identifier', name: n.id.name })),
       id: this.visitIdentifier(node.id),
-      body: this.wrap(node, {
+      body: this.wrap(node.block, {
         type: 'BlockStatement',
-        body: variables.map(n => this.wrap(node, {
+        body: variables.map(n => this.wrap(n, {
           type: 'ExpressionStatement',
-          expression: this.wrap(node, {
+          expression: {
             type: 'AssignmentExpression',
             operator: '=',
-            left: this.wrap(node, {
+            left: {
               type: 'MemberExpression',
-              object: this.wrap(node, {
-                type: 'ThisExpression'
-              }),
+              object: { type: 'ThisExpression' },
               property: this.visitIdentifier(n.id)
-            }),
-            right: n.value !== null ? n.value.acceptExpressionVisitor(this) : this.visitIdentifier(n.id)
-          })
+            },
+            right: n.value !== null ? n.value.acceptExpressionVisitor(this) : { type: 'Identifier', name: n.id.name }
+          }
         }))
       })
     })];
@@ -276,32 +267,32 @@ class OutputJS implements StatementVisitor<Object>, DeclarationVisitor<Object>, 
     // Inherit from the base class
     if (node.base !== null) {
       // Add a call to the constructor for the base class
-      result[0].body.body.unshift(this.wrap(node, {
+      result[0].body.body.unshift(this.wrap(node.base, {
         type: 'ExpressionStatement',
-        expression: this.wrap(node, {
+        expression: {
           type: 'CallExpression',
-          callee: this.wrap(node, {
+          callee: {
             type: 'MemberExpression',
-            object: node.base.acceptExpressionVisitor(this),
-            property: this.wrap(node, { type: 'Identifier', name: 'call' })
-          }),
-          arguments: [this.wrap(node, { type: 'ThisExpression' })].concat(baseVariables.map(n => this.visitIdentifier(n.id)))
-        })
+            object: { type: 'Identifier', name: node.base.computedType.asObject().name },
+            property: { type: 'Identifier', name: 'call' }
+          },
+          arguments: [{ type: 'ThisExpression' }].concat(baseVariables.map(n => this.visitIdentifier(n.id)))
+        }
       }));
 
       // Add a call to __extends()
       this.needExtendsPolyfill = true;
-      result.push(this.wrap(node, {
+      result.push({
         type: 'ExpressionStatement',
-        expression: this.wrap(node, {
+        expression: {
           type: 'CallExpression',
-          callee: this.wrap(node, { type: 'Identifier', name: '__extends' }),
+          callee: { type: 'Identifier', name: '__extends' },
           arguments: [
             this.visitIdentifier(node.id),
             node.base.acceptExpressionVisitor(this)
           ]
-        })
-      }));
+        }
+      });
     }
 
     return result;
@@ -309,34 +300,31 @@ class OutputJS implements StatementVisitor<Object>, DeclarationVisitor<Object>, 
 
   generateCopyConstructor(node: ObjectDeclaration): Object[] {
     var variables: VariableDeclaration[] = <VariableDeclaration[]>node.block.statements.filter(n => n instanceof VariableDeclaration);
-    var mangledName: Object = this.wrap(node.id, OutputJS.mangledCopyConstructorIdentifier(node.symbol.type.asObject()));
-    var $this: Object = this.wrap(node, { type: 'Identifier', name: '$this' });
+    var $this: Object = { type: 'Identifier', name: '$this' };
 
     // Create the constructor function
     var result: any[] = [this.wrap(node, {
       type: 'FunctionDeclaration',
       params: [$this],
-      id: mangledName,
-      body: this.wrap(node, {
+      id: this.wrap(node.id, OutputJS.mangledCopyConstructorIdentifier(node.symbol.type.asObject())),
+      body: this.wrap(node.block, {
         type: 'BlockStatement',
-        body: variables.map(n => this.wrap(node, {
+        body: variables.map(n => this.wrap(n, {
           type: 'ExpressionStatement',
-          expression: this.wrap(node, {
+          expression: {
             type: 'AssignmentExpression',
             operator: '=',
-            left: this.wrap(node, {
+            left: {
               type: 'MemberExpression',
-              object: this.wrap(node, {
-                type: 'ThisExpression'
-              }),
+              object: { type: 'ThisExpression' },
               property: this.visitIdentifier(n.id)
-            }),
-            right: this.wrap(node, {
+            },
+            right: {
               type: 'MemberExpression',
               object: $this,
-              property: this.visitIdentifier(n.id)
-            })
-          })
+              property: { type: 'Identifier', name: n.id.name }
+            }
+          }
         }))
       })
     })];
@@ -344,39 +332,39 @@ class OutputJS implements StatementVisitor<Object>, DeclarationVisitor<Object>, 
     // Inherit from the base class
     if (node.base !== null) {
       // Add a call to the constructor for the base class
-      result[0].body.body.unshift(this.wrap(node, {
+      result[0].body.body.unshift(this.wrap(node.base, {
         type: 'ExpressionStatement',
-        expression: this.wrap(node, {
+        expression: {
           type: 'CallExpression',
-          callee: this.wrap(node, {
+          callee: {
             type: 'MemberExpression',
-            object: this.wrap(node.base, OutputJS.mangledCopyConstructorIdentifier(node.base.computedType.asObject())),
-            property: this.wrap(node, { type: 'Identifier', name: 'call' })
-          }),
-          arguments: [this.wrap(node, { type: 'ThisExpression' })].concat($this)
-        })
+            object: OutputJS.mangledCopyConstructorIdentifier(node.base.computedType.asObject()),
+            property: { type: 'Identifier', name: 'call' }
+          },
+          arguments: [<any>{ type: 'ThisExpression' }].concat($this)
+        }
       }));
     }
 
     // The copy constructor should share the class prototype
-    var prototype: Object = this.wrap(node, { type: 'Identifier', name: 'prototype' });
-    result.push(this.wrap(node, {
+    var prototype: Object = { type: 'Identifier', name: 'prototype' };
+    result.push({
       type: 'ExpressionStatement',
-      expression: this.wrap(node, {
+      expression: {
         type: 'AssignmentExpression',
         operator: '=',
-        left: this.wrap(node, {
+        left: {
           type: 'MemberExpression',
-          object: mangledName,
+          object: OutputJS.mangledCopyConstructorIdentifier(node.symbol.type.asObject()),
           property: prototype
-        }),
-        right: this.wrap(node, {
+        },
+        right: {
           type: 'MemberExpression',
-          object: this.visitIdentifier(node.id),
+          object: { type: 'Identifier', name: node.id.name },
           property: prototype
-        })
-      })
-    }));
+        }
+      }
+    });
 
     return result;
   }
@@ -384,24 +372,25 @@ class OutputJS implements StatementVisitor<Object>, DeclarationVisitor<Object>, 
   generateMemberFunctions(node: ObjectDeclaration): Object[] {
     return node.block.statements.filter(n => n instanceof FunctionDeclaration && n.block !== null).map(n => {
       var result: any = this.visitFunctionDeclaration(n);
+      result.loc = null;
       result.type = 'FunctionExpression';
       result.id = null;
       return this.wrap(n, {
         type: 'ExpressionStatement',
-        expression: this.wrap(n, {
+        expression: {
           type: 'AssignmentExpression',
           operator: '=',
-          left: this.wrap(n, {
+          left: {
             type: 'MemberExpression',
-            object: this.wrap(n, {
+            object: {
               type: 'MemberExpression',
-              object: this.visitIdentifier(node.id),
-              property: this.wrap(n, { type: 'Identifier', name: 'prototype' })
-            }),
+              object: { type: 'Identifier', name: node.id.name },
+              property: { type: 'Identifier', name: 'prototype' }
+            },
             property: this.visitIdentifier(n.id)
-          }),
+          },
           right: result
-        })
+        }
       });
     });
   }
@@ -420,7 +409,7 @@ class OutputJS implements StatementVisitor<Object>, DeclarationVisitor<Object>, 
     assert(node.block !== null);
     return this.wrap(node, {
       type: 'FunctionDeclaration',
-      params: node.args.map(n => this.visitIdentifier(n.id)),
+      params: node.args.map(n => this.wrap(n, this.visitIdentifier(n.id))),
       id: this.visitIdentifier(node.id),
       body: this.visitBlock(node.block)
     });
@@ -430,32 +419,30 @@ class OutputJS implements StatementVisitor<Object>, DeclarationVisitor<Object>, 
     return this.wrap(node, {
       type: 'VariableDeclaration',
       kind: 'var',
-      declarations: [this.wrap(node, {
+      declarations: [{
         type: 'VariableDeclarator',
         id: this.visitIdentifier(node.id),
         init: node.value !== null ? node.value.acceptExpressionVisitor(this) : this.defaultForType(node.symbol.type)
-      })]
+      }]
     });
   }
 
   visitSymbolExpression(node: SymbolExpression): Object {
-    var result: Object = this.wrap(node, {
+    var result: Object = {
       type: 'Identifier',
       name: node.name
-    });
+    };
 
     // Insert "this." before object fields
     if (node.symbol.enclosingObject !== null) {
       return this.wrap(node, {
         type: 'MemberExpression',
-        object: this.wrap(node, {
-          type: 'ThisExpression'
-        }),
+        object: { type: 'ThisExpression' },
         property: result
       });
     }
 
-    return result;
+    return this.wrap(node, result);
   }
 
   static INTEGER_OPS : { [op: string]: boolean } = {
@@ -483,10 +470,10 @@ class OutputJS implements StatementVisitor<Object>, DeclarationVisitor<Object>, 
       type: 'BinaryExpression',
       operator: '|',
       left: result,
-      right: this.wrap(node, {
+      right: {
         type: 'Literal',
         value: 0
-      })
+      }
     });
   }
 
@@ -495,19 +482,19 @@ class OutputJS implements StatementVisitor<Object>, DeclarationVisitor<Object>, 
   }
 
   visitUnaryExpression(node: UnaryExpression): Object {
-    var result: Object = this.wrap(node, {
+    var result: Object = {
       type: 'UnaryExpression',
       operator: node.op,
       argument: node.value.acceptExpressionVisitor(this),
       prefix: true
-    });
+    };
 
     // Cast the result to an integer if needed (- -2147483648 is still -2147483648)
     if (!OutputJS.INTEGER_OPS[node.op] && node.computedType.innerType === SpecialType.INT) {
       result = this.wrapIntegerOperator(node, result);
     }
 
-    return result;
+    return this.wrap(node, result);
   }
 
   visitBinaryExpression(node: BinaryExpression): Object {
@@ -516,11 +503,11 @@ class OutputJS implements StatementVisitor<Object>, DeclarationVisitor<Object>, 
       this.needMultiplicationPolyfill = true;
       return this.wrap(node, {
         type: 'CallExpression',
-        callee: this.wrap(node, {
+        callee: {
           type: 'MemberExpression',
-          object: this.wrap(node, { type: 'Identifier', name: 'Math' }),
-          property: this.wrap(node, { type: 'Identifier', name: 'imul' })
-        }),
+          object: { type: 'Identifier', name: 'Math' },
+          property: { type: 'Identifier', name: 'imul' }
+        },
         arguments: [
           node.left.acceptExpressionVisitor(this),
           node.right.acceptExpressionVisitor(this)
@@ -535,22 +522,22 @@ class OutputJS implements StatementVisitor<Object>, DeclarationVisitor<Object>, 
         if (node.right instanceof NewExpression) {
           return this.wrap(node, {
             type: 'CallExpression',
-            callee: this.wrap(node, {
+            callee: {
               type: 'MemberExpression',
               object: { type: 'Identifier', name: to.asObject().name },
               property: { type: 'Identifier', name: 'call' }
-            }),
+            },
             arguments: [node.left.acceptExpressionVisitor(this)].concat((<NewExpression>node.right).args.map(n => n.acceptExpressionVisitor(this)))
           });
         }
 
         return this.wrap(node, {
           type: 'CallExpression',
-          callee: this.wrap(node, {
+          callee: {
             type: 'MemberExpression',
             object: OutputJS.mangledCopyConstructorIdentifier(to.asObject()),
             property: { type: 'Identifier', name: 'call' }
-          }),
+          },
           arguments: [node.left.acceptExpressionVisitor(this), node.right.acceptExpressionVisitor(this)]
         });
       }
@@ -571,7 +558,7 @@ class OutputJS implements StatementVisitor<Object>, DeclarationVisitor<Object>, 
       result = this.wrapIntegerOperator(node, result);
     }
 
-    return result;
+    return this.wrap(node, result);
   }
 
   visitTernaryExpression(node: TernaryExpression): Object {
@@ -647,12 +634,12 @@ class OutputJS implements StatementVisitor<Object>, DeclarationVisitor<Object>, 
       switch (member.value.computedType.innerType) {
       case NativeTypes.MATH:
         if (member.symbol.name === 'trunc') {
-          return {
+          return this.wrap(node, {
             type: 'BinaryExpression',
             operator: '|',
             left: node.args[0].acceptExpressionVisitor(this),
             right: { type: 'Literal', value: 0 }
-          };
+          });
         }
         break;
 
@@ -672,87 +659,42 @@ class OutputJS implements StatementVisitor<Object>, DeclarationVisitor<Object>, 
           return this.wrap(node, {
             type: 'AssignmentExpression',
             operator: '=',
-            left: this.wrap(node, {
+            left: {
               type: 'MemberExpression',
               object: member.value.acceptExpressionVisitor(this),
               property: node.args[0].acceptExpressionVisitor(this),
               computed: true
-            }),
+            },
             right: node.args[1].acceptExpressionVisitor(this)
           });
 
         case NativeTypes.LIST_PUSH:
-          assert(node.args.length === 1);
-          return this.wrap(node, {
-            type: 'CallExpression',
-            callee: this.wrap(node, {
-              type: 'MemberExpression',
-              object: member.value.acceptExpressionVisitor(this),
-              property: this.wrap(node, { type: 'Identifier', name: 'push' })
-            }),
-            arguments: [node.args[0].acceptExpressionVisitor(this)]
-          });
-
         case NativeTypes.LIST_POP:
-          assert(node.args.length === 0);
-          return this.wrap(node, {
-            type: 'CallExpression',
-            callee: this.wrap(node, {
-              type: 'MemberExpression',
-              object: member.value.acceptExpressionVisitor(this),
-              property: this.wrap(node, { type: 'Identifier', name: 'pop' })
-            }),
-            arguments: []
-          });
-
         case NativeTypes.LIST_UNSHIFT:
-          assert(node.args.length === 1);
-          return this.wrap(node, {
-            type: 'CallExpression',
-            callee: this.wrap(node, {
-              type: 'MemberExpression',
-              object: member.value.acceptExpressionVisitor(this),
-              property: this.wrap(node, { type: 'Identifier', name: 'unshift' })
-            }),
-            arguments: [node.args[0].acceptExpressionVisitor(this)]
-          });
-
         case NativeTypes.LIST_SHIFT:
-          assert(node.args.length === 0);
-          return this.wrap(node, {
-            type: 'CallExpression',
-            callee: this.wrap(node, {
-              type: 'MemberExpression',
-              object: member.value.acceptExpressionVisitor(this),
-              property: this.wrap(node, { type: 'Identifier', name: 'shift' })
-            }),
-            arguments: []
-          });
-
         case NativeTypes.LIST_INDEX_OF:
-          assert(node.args.length === 1);
           return this.wrap(node, {
             type: 'CallExpression',
-            callee: this.wrap(node, {
+            callee: {
               type: 'MemberExpression',
               object: member.value.acceptExpressionVisitor(this),
-              property: this.wrap(node, { type: 'Identifier', name: 'indexOf' })
-            }),
-            arguments: [node.args[0].acceptExpressionVisitor(this)]
+              property: this.visitIdentifier(member.id)
+            },
+            arguments: node.args.map(n => n.acceptExpressionVisitor(this))
           });
 
         case NativeTypes.LIST_INSERT:
           assert(node.args.length === 2);
           return this.wrap(node, {
             type: 'CallExpression',
-            callee: this.wrap(node, {
+            callee: {
               type: 'MemberExpression',
               object: member.value.acceptExpressionVisitor(this),
-              property: this.wrap(node, { type: 'Identifier', name: 'splice' })
-            }),
+              property: { type: 'Identifier', name: 'splice' }
+            },
             arguments: [
               node.args[0].acceptExpressionVisitor(this),
-              this.wrap(node, { type: 'Literal', value: 0 }),
+              { type: 'Literal', value: 0 },
               node.args[1].acceptExpressionVisitor(this)
             ]
           });
@@ -761,18 +703,18 @@ class OutputJS implements StatementVisitor<Object>, DeclarationVisitor<Object>, 
           assert(node.args.length === 1);
           return this.wrap(node, {
             type: 'MemberExpression',
-            object: this.wrap(node, {
+            object: {
               type: 'CallExpression',
-              callee: this.wrap(node, {
+              callee: {
                 type: 'MemberExpression',
                 object: member.value.acceptExpressionVisitor(this),
-                property: this.wrap(node, { type: 'Identifier', name: 'splice' })
-              }),
+                property: { type: 'Identifier', name: 'splice' }
+              },
               arguments: [
                 node.args[0].acceptExpressionVisitor(this),
-                this.wrap(node, { type: 'Literal', value: 1 })
+                { type: 'Literal', value: 1 }
               ]
-            }),
+            },
             property: { type: 'Literal', value: 0 },
             computed: true
           });
