@@ -58,7 +58,7 @@ NativeTypes.LIST_UNSHIFT = NativeTypes.LIST.scope.define('unshift', NativeTypes.
 NativeTypes.LIST_SHIFT = NativeTypes.LIST.scope.define('shift', NativeTypes.createFunction(NativeTypes.LIST_T, []));
 NativeTypes.LIST_INDEX_OF = NativeTypes.LIST.scope.define('indexOf', NativeTypes.createFunction(SpecialType.INT, [NativeTypes.LIST_T]));
 NativeTypes.LIST_INSERT = NativeTypes.LIST.scope.define('insert', NativeTypes.createFunction(SpecialType.VOID, [SpecialType.INT, NativeTypes.LIST_T]));
-NativeTypes.LIST_REMOVE = NativeTypes.LIST.scope.define('remove', NativeTypes.createFunction(SpecialType.VOID, [SpecialType.INT]));
+NativeTypes.LIST_REMOVE = NativeTypes.LIST.scope.define('remove', NativeTypes.createFunction(NativeTypes.LIST_T, [SpecialType.INT]));
 
 // Getting an element from a list of owned pointers should not steal ownership
 NativeTypes.LIST_GET.type.asFunction().result.modifiers |= TypeModifier.UNOWNED;

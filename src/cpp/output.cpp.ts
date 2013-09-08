@@ -62,8 +62,7 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
 
     if (objectType === NativeTypes.LIST) {
       this.library.need(LibraryCPP.VECTOR_HEADER);
-      assert(type.substitutions.length === 1);
-      assert(type.substitutions[0].parameter === NativeTypes.LIST_T);
+      assert(type.substitutions.length === 1 && type.substitutions[0].parameter === NativeTypes.LIST_T);
       result = {
         kind: 'SpecializeTemplate',
         template: {
@@ -714,7 +713,7 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
             },
             right: args[0]
           };
-          assert(member.value.computedType.substitutions.length === 1);
+          assert(member.value.computedType.substitutions.length === 1 && member.value.computedType.substitutions[0].parameter === NativeTypes.LIST_T);
           if (member.value.computedType.substitutions[0].type.isOwned()) {
             return {
               kind: 'CallExpression',
@@ -766,15 +765,22 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
         case NativeTypes.LIST_INDEX_OF:
         case NativeTypes.LIST_INSERT:
         case NativeTypes.LIST_REMOVE:
+          assert(member.value.computedType.substitutions.length === 1 && member.value.computedType.substitutions[0].parameter === NativeTypes.LIST_T);
+          var type: WrappedType = member.value.computedType.substitutions[0].type;
           switch (member.symbol) {
           case NativeTypes.LIST_POP: this.library.need(LibraryCPP.LIST_POP); break;
           case NativeTypes.LIST_UNSHIFT: this.library.need(LibraryCPP.LIST_UNSHIFT); break;
           case NativeTypes.LIST_SHIFT: this.library.need(LibraryCPP.LIST_SHIFT); break;
           case NativeTypes.LIST_INSERT: this.library.need(LibraryCPP.LIST_INSERT); break;
-          case NativeTypes.LIST_REMOVE: this.library.need(LibraryCPP.LIST_REMOVE); break;
+          case NativeTypes.LIST_REMOVE:
+            switch (type.kind) {
+            case TypeKind.VALUE: case TypeKind.REF: this.library.need(LibraryCPP.LIST_REMOVE); break;
+            case TypeKind.OWNED: this.library.need(LibraryCPP.LIST_REMOVE_OWNED); break;
+            default: assert(false);
+            }
+            break;
           case NativeTypes.LIST_INDEX_OF:
-            this.library.need(LibraryCPP.ALGORITHM_HEADER);
-            switch (member.symbol.type.kind) {
+            switch (type.kind) {
               case TypeKind.OWNED: this.library.need(LibraryCPP.LIST_INDEXOF_OWNED); break;
               case TypeKind.REF: this.library.need(LibraryCPP.LIST_INDEXOF_REF); break;
               case TypeKind.VALUE: this.library.need(LibraryCPP.LIST_INDEXOF_VALUE); break;

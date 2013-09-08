@@ -1,3 +1,34 @@
+// TODO
+[
+  'class Foo {',
+  '  int x = 0;',
+  '}',
+  '',
+  'owned List<List<Foo>> createMatrix(int size) {',
+  '  owned List<List<Foo>> matrix = new List<List<Foo>>();',
+  '  int i;',
+  '  int j;',
+  '  for (i = 0; i < size; i = i + 1) {',
+  '    matrix.push(new List<Foo>());',
+  '    for (j = 0; j < size; j = j + 1) {',
+  '      matrix.get(i).push(new Foo());',
+  '    }',
+  '  }',
+  '  return move matrix;',
+  '}',
+  '',
+  'List<List<Foo>> copyMatrix(List<List<Foo>> matrix) {',
+  '  return matrix;',
+  '}',
+  '',
+  'int main() {',
+  '  List<List<Foo>> x = createMatrix(3);',
+  '  List<List<Foo>> y;',
+  '  y = copyMatrix(x);',
+  '  return 0;',
+  '}',
+];
+
 // TODO: It's bad that there's no warning for this:
 //
 //   class Foo {
@@ -7,6 +38,26 @@
 //   }
 //
 // Maybe make an explicit copy operator?
+
+test([
+  'int main() {',
+  '  List<int> a = new List<bool>();',
+  '  List<int> b = new List<int>();',
+  '  List<List<int>> c = new List<List<bool>>();',
+  '  List<List<int>> d = new List<List<int>>();',
+  '  return 0;',
+  '}',
+], [
+  'error on line 2 of <stdin>: cannot convert from pointer of type owned List<bool> to value of type List<int>',
+  '',
+  '  List<int> a = new List<bool>();',
+  '                ~~~~~~~~~~~~~~~~',
+  '',
+  'error on line 4 of <stdin>: cannot convert from pointer of type owned List<List<bool>> to value of type List<List<int>>',
+  '',
+  '  List<List<int>> c = new List<List<bool>>();',
+  '                      ~~~~~~~~~~~~~~~~~~~~~~',
+]);
 
 test([
   'class Foo {',

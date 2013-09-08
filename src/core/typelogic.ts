@@ -10,7 +10,8 @@ class TypeLogic {
   }
 
   static equalWrapped(a: WrappedType, b: WrappedType): boolean {
-    return TypeLogic.equal(a.innerType, b.innerType) && a.kind === b.kind && a.modifiers === b.modifiers;
+    return TypeLogic.equal(a.innerType, b.innerType) && a.kind === b.kind && a.modifiers === b.modifiers && a.substitutions.length === b.substitutions.length &&
+      a.substitutions.every(sa => b.substitutions.some(sb => sa.parameter === sb.parameter && TypeLogic.equalWrapped(sa.type, sb.type)));
   }
 
   static allEqualWrapped(a: WrappedType[], b: WrappedType[]): boolean {

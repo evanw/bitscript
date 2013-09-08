@@ -48,6 +48,12 @@ class OutputJS implements StatementVisitor<Object>, DeclarationVisitor<Object>, 
 
   defaultForType(type: WrappedType): Object {
     if (type.isObject() && type.isValue()) {
+      if (type.innerType === NativeTypes.LIST) {
+        return {
+          type: 'ArrayExpression',
+          elements: []
+        };
+      }
       return {
         type: 'NewExpression',
         callee: { type: 'Identifier', name: type.asObject().name },
@@ -69,13 +75,53 @@ class OutputJS implements StatementVisitor<Object>, DeclarationVisitor<Object>, 
     return { type: 'Identifier', name: objectType.name + '$copy' };
   }
 
-  insertImplicitConversion(from: Expression, to: WrappedType): Object {
-    if (to.isObject() && to.isValue() && (!from.computedType.isOwned() || from.computedType.isStorage())) {
-      return this.wrap(from, {
-        type: 'NewExpression',
-        callee: OutputJS.mangledCopyConstructorIdentifier(to.asObject()),
-        arguments: [from.acceptExpressionVisitor(this)]
+  insertCopyConstructorCall(node: Expression, result: Object, type: WrappedType): Object {
+    if (type.innerType === NativeTypes.LIST) {
+      assert(type.substitutions.length === 1 && type.substitutions[0].parameter === NativeTypes.LIST_T);
+
+      if (type.substitutions[0].type.isPrimitive()) {
+        return this.wrap(node, {
+          type: 'CallExpression',
+          callee: this.wrap(node, {
+            type: 'MemberExpression',
+            object: result,
+            property: { type: 'Identifier', name: 'slice' }
+          }),
+          arguments: []
+        });
+      }
+
+      return this.wrap(node, {
+        type: 'CallExpression',
+        callee: this.wrap(node, {
+          type: 'MemberExpression',
+          object: result,
+          property: { type: 'Identifier', name: 'map' }
+        }),
+        arguments: [this.wrap(node, {
+          type: 'FunctionExpression',
+          params: [{ type: 'Identifier', name: 'x' }],
+          body: this.wrap(node, {
+            type: 'BlockStatement',
+            body: [{
+              type: 'ReturnStatement',
+              argument: this.insertCopyConstructorCall(node, { type: 'Identifier', name: 'x' }, type.substitutions[0].type)
+            }]
+          })
+        })]
       });
+    }
+
+    return this.wrap(node, {
+      type: 'NewExpression',
+      callee: OutputJS.mangledCopyConstructorIdentifier(type.asObject()),
+      arguments: [result]
+    });
+  }
+
+  insertImplicitConversion(from: Expression, to: WrappedType): Object {
+    if (to.isObject() && to.isValue()) {
+      return this.insertCopyConstructorCall(from, from.acceptExpressionVisitor(this), to);
     }
 
     return from.acceptExpressionVisitor(this);
@@ -714,16 +760,21 @@ class OutputJS implements StatementVisitor<Object>, DeclarationVisitor<Object>, 
         case NativeTypes.LIST_REMOVE:
           assert(node.args.length === 1);
           return this.wrap(node, {
-            type: 'CallExpression',
-            callee: this.wrap(node, {
-              type: 'MemberExpression',
-              object: member.value.acceptExpressionVisitor(this),
-              property: this.wrap(node, { type: 'Identifier', name: 'splice' })
+            type: 'MemberExpression',
+            object: this.wrap(node, {
+              type: 'CallExpression',
+              callee: this.wrap(node, {
+                type: 'MemberExpression',
+                object: member.value.acceptExpressionVisitor(this),
+                property: this.wrap(node, { type: 'Identifier', name: 'splice' })
+              }),
+              arguments: [
+                node.args[0].acceptExpressionVisitor(this),
+                this.wrap(node, { type: 'Literal', value: 1 })
+              ]
             }),
-            arguments: [
-              node.args[0].acceptExpressionVisitor(this),
-              this.wrap(node, { type: 'Literal', value: 1 })
-            ]
+            property: { type: 'Literal', value: 0 },
+            computed: true
           });
 
         default:

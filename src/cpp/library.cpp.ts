@@ -6,7 +6,6 @@ enum LibraryCPP {
   MATH_RANDOM,
   MATH_IMIN,
   MATH_IMAX,
-  ALGORITHM_HEADER,
   LIST_POP,
   LIST_UNSHIFT,
   LIST_SHIFT,
@@ -15,6 +14,7 @@ enum LibraryCPP {
   LIST_INDEXOF_VALUE,
   LIST_INSERT,
   LIST_REMOVE,
+  LIST_REMOVE_OWNED,
 }
 
 class LibraryDataCPP {
@@ -52,13 +52,6 @@ class LibraryDataCPP {
       result.push({
         kind: 'IncludeStatement',
         text: '<vector>'
-      });
-    }
-
-    if (this.isNeeded[LibraryCPP.ALGORITHM_HEADER]) {
-      result.push({
-        kind: 'IncludeStatement',
-        text: '<algorithm>'
       });
     }
 
@@ -181,8 +174,24 @@ class LibraryDataCPP {
         kind: 'VerbatimStatement',
         text: [
           'template <typename T>',
-          'void List_remove(std::vector<T> *list, int offset) {',
+          'T List_remove(std::vector<T> *list, int offset) {',
+          '  T item = (*list)[offset];',
           '  list->erase(list->begin() + offset);',
+          '  return item;',
+          '}',
+        ].join('\n')
+      });
+    }
+
+    if (this.isNeeded[LibraryCPP.LIST_REMOVE_OWNED]) {
+      result.push({
+        kind: 'VerbatimStatement',
+        text: [
+          'template <typename T>',
+          'std::unique_ptr<T> List_remove(std::vector<std::unique_ptr<T>> *list, int offset) {',
+          '  std::unique_ptr<T> item = std::move((*list)[offset]);',
+          '  list->erase(list->begin() + offset);',
+          '  return item;',
           '}',
         ].join('\n')
       });
