@@ -46,40 +46,37 @@ enum ForEachSymbol {
 
 class Scope {
   // Note: All symbols are prefixed with ' ' to avoid collisions with native properties (i.e. __proto__)
-  private symbols: { [name: string]: Symbol } = {};
+  private _symbols: { [name: string]: Symbol } = {};
 
   constructor(
     public lexicalParent: Scope) {
   }
 
   // Return value determines continue vs break
-  forEachSymbol(callback: (symbol: Symbol) => ForEachSymbol) {
-    for (var name in this.symbols) {
-      if (name[0] === ' ' && callback(this.symbols[name]) === ForEachSymbol.BREAK) {
-        break;
+  symbols(): Symbol[] {
+    var symbols: Symbol[] = [];
+    for (var name in this._symbols) {
+      if (name[0] === ' ') {
+        symbols.push(this._symbols[name]);
       }
     }
+    return symbols;
   }
 
   containsAbstractSymbols(): boolean {
-    var isAbstract: boolean = false;
-    this.forEachSymbol(s => {
-      if (s.isAbstract) isAbstract = true;
-      return isAbstract ? ForEachSymbol.BREAK : ForEachSymbol.CONTINUE;
-    });
-    return isAbstract;
+    return this.symbols().some(s => s.isAbstract);
   }
 
   replace(symbol: Symbol) {
-    this.symbols[' ' + symbol.name] = symbol;
+    this._symbols[' ' + symbol.name] = symbol;
   }
 
   define(name: string, type: WrappedType): Symbol {
-    return this.symbols[' ' + name] = new Symbol(name, type, this);
+    return this._symbols[' ' + name] = new Symbol(name, type, this);
   }
 
   find(name: string): Symbol {
-    return this.symbols[' ' + name] || null;
+    return this._symbols[' ' + name] || null;
   }
 
   lexicalFind(name: string): Symbol {

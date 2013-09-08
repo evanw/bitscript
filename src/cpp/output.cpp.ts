@@ -358,8 +358,25 @@ class OutputCPP implements StatementVisitor<Object>, DeclarationVisitor<Object>,
     };
   }
 
+  static reorderValueTypeDefinitions(objects: ObjectDeclaration[]) {
+    for (var i = 0; i < objects.length; i++) {
+      var I: ObjectType = objects[i].symbol.type.asObject();
+      var index = i;
+      for (var j = i - 1; j >= 0; j--) {
+        var J: ObjectType = objects[j].symbol.type.asObject();
+        if (J.scope.symbols().some(s => s.type.isValue() && s.type.isObject() && TypeLogic.isBaseTypeOf(s.type.asObject(), I))) {
+          index = j;
+        }
+      }
+      if (index !== i) {
+        objects.splice(index, 0, objects.splice(i, 1)[0]);
+      }
+    }
+  }
+
   visitModule(node: Module): Object {
     var objects: ObjectDeclaration[] = node.block.sortedObjectDeclarations();
+    OutputCPP.reorderValueTypeDefinitions(objects);
     var result: any = {
       kind: 'Program',
       body: flatten([

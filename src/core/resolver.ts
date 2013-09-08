@@ -87,10 +87,7 @@ class Initializer implements DeclarationVisitor<WrappedType> {
 
       // Mix the symbols from the base scope in with this block's symbols
       // to make detecting abstract vs fully implemented types easier
-      type.baseType.scope.forEachSymbol(s => {
-        node.block.scope.replace(s);
-        return ForEachSymbol.CONTINUE;
-      });
+      type.baseType.scope.symbols().forEach(s => node.block.scope.replace(s));
     }
 
     // Populate the block scope
@@ -107,10 +104,7 @@ class Initializer implements DeclarationVisitor<WrappedType> {
 
     // Lazily compute some class information (see ObjectType for the reason why)
     type.lazyInitializer = () => {
-      node.block.scope.forEachSymbol(s => {
-        this.resolver.ensureDeclarationIsInitialized(s.node);
-        return ForEachSymbol.CONTINUE;
-      });
+      node.block.scope.symbols().forEach(s => this.resolver.ensureDeclarationIsInitialized(s.node));
       var baseArgTypes: WrappedType[] = type.baseType !== null ? type.baseType.constructorType().args : [];
       var argTypes: WrappedType[] = node.block.statements
         .filter(n => n instanceof VariableDeclaration && (<VariableDeclaration>n).value === null)

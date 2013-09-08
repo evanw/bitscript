@@ -36,9 +36,8 @@ class BinaryLayout {
     }
 
     // Objects must be aligned to the maximum alignment of each member
-    objectType.scope.forEachSymbol(symbol => {
+    objectType.scope.symbols().forEach(symbol => {
       objectType.byteAlignment = Math.max(objectType.byteAlignment, symbol.type.byteAlignment());
-      return ForEachSymbol.CONTINUE;
     });
   }
 
@@ -58,10 +57,10 @@ class BinaryLayout {
     }
 
     // Give each new symbol a vtable slot and match up each overridden symbol
-    objectType.scope.forEachSymbol(symbol => {
+    objectType.scope.symbols().forEach(symbol => {
       // Only look at virtual symbols (which are all functions)
       if (!symbol.isVirtual()) {
-        return ForEachSymbol.CONTINUE;
+        return;
       }
 
       // Overridden symbols reuse the same vtable slot
@@ -75,8 +74,6 @@ class BinaryLayout {
         symbol.byteOffset = objectType.vtable.length << 2;
         objectType.vtable.push(symbol);
       }
-
-      return ForEachSymbol.CONTINUE;
     });
   }
 
@@ -88,15 +85,9 @@ class BinaryLayout {
     // The ObjectType array is sorted so the base class should have a size
     assert(objectType.baseType === null || objectType.baseType.byteSize !== 0);
 
-    // Collect all symbols
-    var symbols: Symbol[] = [];
-    objectType.scope.forEachSymbol(symbol => {
-      // Only take symbols from this scope, not base class scopes
-      if (symbol.scope === objectType.scope && !symbol.type.isFunction()) {
-        symbols.push(symbol);
-      }
-      return ForEachSymbol.CONTINUE;
-    });
+    // Only take symbols from this scope, not base class scopes
+    var symbols: Symbol[] = objectType.scope.symbols().filter(symbol =>
+      symbol.scope === objectType.scope && !symbol.type.isFunction());
 
     // Stable sort symbols by decreasing alignment to pack them tightly
     // together (we might as well since we have no pointer arithmetic)
