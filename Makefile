@@ -17,6 +17,7 @@ SOURCES= \
 	src/core/resolver.ts \
 	src/core/compiler.ts \
 	src/core/binarylayout.ts \
+	src/js/library.js.ts \
 	src/js/output.js.ts \
 	src/asmjs/output.asmjs.ts \
 	src/cpp/library.cpp.ts\

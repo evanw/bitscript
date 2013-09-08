@@ -15,7 +15,7 @@ if (typeof esprima === 'undefined') {
 }
 
 if (typeof escodegen === 'undefined') {
-  var escodegen = require('escodegen');
+  var escodegen = require('escodegen-evanw');
 }
 
 if (typeof cppcodegen === 'undefined') {

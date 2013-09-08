@@ -1,6 +1,5 @@
 class OutputJS implements StatementVisitor<Object>, DeclarationVisitor<Object>, ExpressionVisitor<Object> {
-  needExtendsPolyfill: boolean = false;
-  needMultiplicationPolyfill: boolean = false;
+  library: LibraryDataJS = new LibraryDataJS();
   returnType: WrappedType = null;
 
   constructor(
@@ -129,29 +128,7 @@ class OutputJS implements StatementVisitor<Object>, DeclarationVisitor<Object>, 
         node.block.functionDeclarationsWithBlocks().map(n => n.acceptStatementVisitor(this)),
       ])
     };
-
-    if (this.needMultiplicationPolyfill) {
-      result.body = esprima.parse([
-        'if (!Math.imul) {',
-        '  Math.imul = function(a, b) {',
-        '    var al = a & 0xFFFF, bl = b & 0xFFFF;',
-        '    return al * bl + ((a >>> 16) * bl + al * (b >>> 16) << 16) | 0;',
-        '  };',
-        '}',
-      ].join('\n')).body.concat(result.body);
-    }
-
-    if (this.needExtendsPolyfill) {
-      result.body = esprima.parse([
-        'function __extends(d, b) {',
-        '  function c() {}',
-        '  c.prototype = b.prototype;',
-        '  d.prototype = new c();',
-        '  d.prototype.constructor = d;',
-        '}',
-      ].join('\n')).body.concat(result.body);
-    }
-
+    result.body = this.library.generate().concat(result.body);
     return this.wrap(node, result);
   }
 
@@ -281,7 +258,7 @@ class OutputJS implements StatementVisitor<Object>, DeclarationVisitor<Object>, 
       }));
 
       // Add a call to __extends()
-      this.needExtendsPolyfill = true;
+      this.library.need(LibraryJS.EXTENDS);
       result.push({
         type: 'ExpressionStatement',
         expression: {
@@ -500,7 +477,7 @@ class OutputJS implements StatementVisitor<Object>, DeclarationVisitor<Object>, 
   visitBinaryExpression(node: BinaryExpression): Object {
     // Special-case integer multiplication
     if (node.op === '*' && node.computedType.innerType === SpecialType.INT) {
-      this.needMultiplicationPolyfill = true;
+      this.library.need(LibraryJS.MATH_IMUL);
       return this.wrap(node, {
         type: 'CallExpression',
         callee: {
@@ -519,6 +496,15 @@ class OutputJS implements StatementVisitor<Object>, DeclarationVisitor<Object>, 
     if (node.op === '=') {
       var to: WrappedType = node.left.computedType;
       if (to.isObject() && to.isValue()) {
+        if (to.innerType === NativeTypes.LIST) {
+          this.library.need(LibraryJS.LIST_ASSIGN);
+          return this.wrap(node, {
+            type: 'CallExpression',
+            callee: { type: 'Identifier', name: 'List$assign' },
+            arguments: [node.left.acceptExpressionVisitor(this)].concat(node.right.acceptExpressionVisitor(this))
+          });
+        }
+
         if (node.right instanceof NewExpression) {
           return this.wrap(node, {
             type: 'CallExpression',
