@@ -67,7 +67,7 @@ class OutputJS implements StatementVisitor<Object>, DeclarationVisitor<Object>, 
     return { type: 'Identifier', name: objectType.name + '$copy' };
   }
 
-  insertCopyConstructorCall(result: Object, type: WrappedType): Object {
+  insertCopyConstructorCall(result: any, type: WrappedType): Object {
     if (type.innerType === NativeTypes.LIST) {
       assert(type.substitutions.length === 1 && type.substitutions[0].parameter === NativeTypes.LIST_T);
 
@@ -104,7 +104,7 @@ class OutputJS implements StatementVisitor<Object>, DeclarationVisitor<Object>, 
       };
     }
 
-    return {
+    return result.type === 'NewExpression' ? result : {
       type: 'NewExpression',
       callee: OutputJS.mangledCopyConstructorIdentifier(type.asObject()),
       arguments: [result]
@@ -302,7 +302,10 @@ class OutputJS implements StatementVisitor<Object>, DeclarationVisitor<Object>, 
               property: { type: 'Identifier', name: n.id.name }
             }
           }
-        }))
+        })).concat({
+          type: 'ReturnStatement',
+          argument: { type: 'ThisExpression' }
+        })
       })
     })];
 
