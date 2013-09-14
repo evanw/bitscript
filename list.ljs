@@ -1,0 +1,75 @@
+typedef byte *T;
+
+struct List {
+  int used;
+  int allocated;
+  T *data;
+};
+
+function List *List_new() {
+  let List *list = new List();
+  list->used = list->allocated = 0;
+  list->data = null;
+  return list;
+}
+
+function List_grow(List *list) {
+  let int n = list->used;
+  if (n == list->allocated) {
+    let int length = 10 + (list->allocated << 1);
+    let T *from = list->data;
+    let T *to = new T[length];
+    for (let int i = 0; i < n; ++i) {
+      to[i] = from[i];
+    }
+    list->allocated = length;
+    list->data = to;
+    delete from;
+  }
+}
+
+function List_push(List *list, T item) {
+  List_grow(list);
+  list->data[list->used++] = item;
+}
+
+function T List_pop(List *list) {
+  return list->used == 0 ? null : list->data[--list->used];
+}
+
+function List_unshift(List *list, T item) {
+  List_insert(list, 0, item);
+}
+
+function T List_shift(List *list) {
+  return list->used == 0 ? null : List_remove(list, 0);
+}
+
+function int List_indexOf(List *list, T item) {
+  for (let int i = 0, n = list->used; i < n; ++i) {
+    if (list->data[i] == item) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+function void List_insert(List *list, int index, T item) {
+  List_grow(list);
+  let T *data = list->data;
+  for (let int i = list->used - 1; i > index; --i) {
+    data[i] = data[i - 1];
+  }
+  data[index] = item;
+  ++list->used;
+}
+
+function T List_remove(List *list, int index) {
+  let T *data = list->data;
+  let T item = data[index];
+  for (let int i = index, n = list->used; i < n; ++i) {
+    data[i] = data[i + 1];
+  }
+  --list->used;
+  return item;
+}
