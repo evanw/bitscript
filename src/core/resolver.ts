@@ -735,7 +735,7 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
       switch (node.op) {
       case '*':
         if (value.isPointer()) {
-          node.computedType = value.innerType.wrapReference();
+          node.computedType = value.innerType.wrapValue().withModifier(TypeModifier.STORAGE);
           return;
         }
         break;

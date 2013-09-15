@@ -25,8 +25,9 @@ SOURCES= \
 
 TESTS= \
 	tests/common.ts \
-	tests/cpp.ts \
-	tests/js.ts
+	tests/current.ts
+	# tests/cpp.ts \
+	# tests/js.ts \
 	# tests/statements.ts \
 	# tests/operators.ts \
 	# tests/modifiers.ts \
