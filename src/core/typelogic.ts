@@ -43,7 +43,7 @@ class TypeLogic {
     if (from.isNull() && to.isPointer()) return true;
     if (from.isObject() && to.isObject()) {
       return TypeLogic.isBaseTypeOf(from.asObject(), to.asObject()) && // Upcasting is implicit
-        !to.isValue() || TypeLogic.equal(from.innerType, to.innerType); // Forbid slicing via copy
+        to.isPointer() || TypeLogic.equal(from.innerType, to.innerType); // Forbid slicing via copy
     }
     return TypeLogic.equal(from.innerType, to.innerType);
   }
@@ -65,7 +65,7 @@ class TypeLogic {
     if (from.isNumeric() && to.isNumeric()) return true;
     if (from.isObject() && to.isObject()) {
       return TypeLogic.isBaseTypeOf(to.asObject(), from.asObject()) && // Downcasting is explicit
-        !to.isValue() || TypeLogic.equal(from.innerType, to.innerType); // Forbid slicing via copy
+        to.isPointer() || TypeLogic.equal(from.innerType, to.innerType); // Forbid slicing via copy
     }
     return TypeLogic.canImplicitlyConvert(from, to);
   }

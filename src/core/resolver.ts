@@ -312,7 +312,7 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
     }
 
     // Make sure casting to a value type involves a copy or a move
-    if (type.isValue() && type.isObject() && !(node instanceof CopyExpression) && !(node instanceof MoveExpression)) {
+    if (!type.isPointer() && type.isObject() && !(node instanceof CopyExpression) && !(node instanceof MoveExpression)) {
       semanticErrorNeedMoveOrCopy(this.log, node.range, node.computedType, type);
       return;
     }
