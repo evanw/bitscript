@@ -203,7 +203,8 @@ class DeclarationInitializer implements DeclarationVisitor<WrappedType> {
     this.resolver.resolveAsType(node.type);
 
     // Validate variable type
-    if (!this.resolver.checkVariableType(node.type)) {
+    if (!TypeLogic.isValidVariableType(node.type.computedType)) {
+      semanticErrorBadVariableType(this.resolver.log, node.type.range, node.type.computedType);
       return NativeTypes.ERROR.wrapValue();
     }
 
@@ -297,14 +298,6 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
       semanticErrorUnexpectedModifier(this.log, node.id.range, name, why);
       node.modifiers = node.modifiers & ~modifier;
     }
-  }
-
-  checkVariableType(node: Expression): boolean {
-    if (!TypeLogic.isValidVariableType(node.computedType)) {
-      semanticErrorBadVariableType(this.log, node.range, node.computedType);
-      return false;
-    }
-    return true;
   }
 
   checkImplicitConversion(type: WrappedType, node: Expression) {
@@ -687,8 +680,9 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
       return;
     }
 
-    // Validate variable type
-    if (!this.checkVariableType(node.type)) {
+    // Validate target type
+    if (to.isVoid()) {
+      semanticErrorBadCastType(this.log, node.type.range, to);
       return;
     }
 

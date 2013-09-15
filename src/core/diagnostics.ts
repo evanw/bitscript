@@ -177,6 +177,10 @@ function semanticErrorExpectedMove(log: Log, range: SourceRange, type: WrappedTy
   log.error(range, 'cannot move ' + type + ' without a move expression');
 }
 
+function semanticErrorBadCastType(log: Log, range: SourceRange, type: WrappedType) {
+  log.error(range, 'cannot cast to ' + type);
+}
+
 function semanticErrorBadVariableType(log: Log, range: SourceRange, type: WrappedType) {
   log.error(range, 'cannot create variable of ' + (type.isObject() && type.asObject().isAbstract() ? 'abstract ' : '') + type);
 }
