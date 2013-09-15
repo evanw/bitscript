@@ -39,7 +39,7 @@ class TypeLogic {
   }
 
   static checkImplicitConversionTypes(from: WrappedType, to: WrappedType): boolean {
-    if (from.isInt() && to.isDouble()) return true;
+    if ((from.isInt() || from.isFloat()) && to.isDouble()) return true;
     if (from.isNull() && to.isPointer()) return true;
     if (from.isObject() && to.isObject()) {
       return TypeLogic.isBaseTypeOf(from.asObject(), to.asObject()) && // Upcasting is implicit

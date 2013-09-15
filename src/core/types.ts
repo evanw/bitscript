@@ -54,14 +54,6 @@ class SpecialType extends Type {
     super(byteSize, byteSize);
   }
 
-  static INT: SpecialType = new SpecialType(4, 'int');
-  static BOOL: SpecialType = new SpecialType(1, 'bool');
-  static NULL: SpecialType = new SpecialType(4, 'null');
-  static VOID: SpecialType = new SpecialType(0, 'void');
-  static ERROR: SpecialType = new SpecialType(0, '<error>');
-  static DOUBLE: SpecialType = new SpecialType(8, 'double');
-  static CIRCULAR: SpecialType = new SpecialType(0, '<circular>');
-
   asString(): string {
     return this.name;
   }
@@ -182,35 +174,43 @@ class WrappedType {
   }
 
   isError(): boolean {
-    return this.innerType === SpecialType.ERROR;
+    return this.innerType === NativeTypes.ERROR;
   }
 
   isCircular(): boolean {
-    return this.innerType === SpecialType.CIRCULAR;
+    return this.innerType === NativeTypes.CIRCULAR;
   }
 
   isNull(): boolean {
-    return this.innerType === SpecialType.NULL;
+    return this.innerType === NativeTypes.NULL;
   }
 
   isVoid(): boolean {
-    return this.innerType === SpecialType.VOID;
+    return this.innerType === NativeTypes.VOID;
   }
 
   isInt(): boolean {
-    return this.innerType === SpecialType.INT;
+    return this.innerType === NativeTypes.INT;
+  }
+
+  isFloat(): boolean {
+    return this.innerType === NativeTypes.FLOAT;
   }
 
   isDouble(): boolean {
-    return this.innerType === SpecialType.DOUBLE;
+    return this.innerType === NativeTypes.DOUBLE;
   }
 
   isBool(): boolean {
-    return this.innerType === SpecialType.BOOL;
+    return this.innerType === NativeTypes.BOOL;
+  }
+
+  isNumeric():  boolean {
+    return this.isInt() || this.isFloat() || this.isDouble();
   }
 
   isPrimitive(): boolean {
-    return this.isInt() || this.isDouble() || this.isBool();
+    return this.isNumeric() || this.isBool();
   }
 
   isObject(): boolean {
@@ -242,7 +242,7 @@ class WrappedType {
       this.innerType.asString() +
       (this.substitutions.length > 0 ? '<' + TypeLogic.filterSubstitutionsForType(
         this.substitutions, this.innerType).map(s => s.type.asString()).join(', ') + '>' : '') +
-      (this.isPointer() ? ' *' : this.isReference() ? ' &' : '')
+      (this.isPointer() ? '*' : this.isReference() ? '&' : '')
     );
   }
 

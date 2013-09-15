@@ -65,9 +65,10 @@ function parseArguments(context: ParserContext): VariableDeclaration[] {
   if (!context.expect('(')) return null;
   while (!context.peek(')')) {
     if (args.length > 0 && !context.expect(',')) return null;
+    var modifiers: number = parseSymbolModifiers(context);
     var type: Expression = parseType(context); if (type === null) return null;
     var id: Identifier = parseIdentifier(context); if (id === null) return null;
-    args.push(new VariableDeclaration(spanRange(type.range, id.range), id, 0, type, null));
+    args.push(new VariableDeclaration(spanRange(type.range, id.range), id, modifiers, type, null));
   }
   if (!context.expect(')')) return null;
   return args;
@@ -75,6 +76,8 @@ function parseArguments(context: ParserContext): VariableDeclaration[] {
 
 function parseInitializers(context: ParserContext): Initializer[] {
   var initializers: Initializer[] = [];
+
+  // The superclass initializer can have multiple arguments
   if (context.peek('super')) {
     var token: Token = context.next();
     var id: Identifier = new Identifier(token.range, token.text);
@@ -84,6 +87,8 @@ function parseInitializers(context: ParserContext): Initializer[] {
     initializers.push(new Initializer(context.spanSince(id.range), id, values));
     if (!context.eat(',')) return initializers;
   }
+
+  // Each member variable initializer has one argument
   do {
     var id: Identifier = parseIdentifier(context); if (id === null) return null;
     if (!context.expect('(')) return null;
@@ -91,6 +96,7 @@ function parseInitializers(context: ParserContext): Initializer[] {
     if (!context.expect(')')) return null;
     initializers.push(new Initializer(context.spanSince(id.range), id, [value]));
   } while(context.eat(','));
+
   return initializers;
 }
 
@@ -103,16 +109,8 @@ function parseStatements(context: ParserContext, hint: StatementHint): Statement
   return statements;
 }
 
-enum StatementHint {
-  NORMAL,
-  IN_CLASS,
-}
-
-function parseStatement(context: ParserContext, hint: StatementHint): Statement {
-  var range: SourceRange = context.current().range;
-
-  // Parse symbol modifiers
-  function modifier(name: string, flag: SymbolModifier): boolean {
+function parseSymbolModifiers(context: ParserContext): number {
+  function checkModifier(flag: SymbolModifier, name: string): boolean {
     var token: Token = context.current();
     if (!context.eat(name)) return false;
     if (modifiers & flag) semanticErrorDuplicateModifier(context.log, token.range, name);
@@ -121,10 +119,21 @@ function parseStatement(context: ParserContext, hint: StatementHint): Statement 
   }
   var modifiers: number = 0;
   while (
-    modifier('over', SymbolModifier.OVER) ||
-    modifier('final', SymbolModifier.FINAL) ||
-    modifier('static', SymbolModifier.STATIC)) {
+    checkModifier(SymbolModifier.OVER, 'over') ||
+    checkModifier(SymbolModifier.FINAL, 'final') ||
+    checkModifier(SymbolModifier.STATIC, 'static')) {
   }
+  return modifiers;
+}
+
+enum StatementHint {
+  NORMAL,
+  IN_CLASS,
+}
+
+function parseStatement(context: ParserContext, hint: StatementHint): Statement {
+  var range: SourceRange = context.current().range;
+  var modifiers: number = parseSymbolModifiers(context);
 
   // Special function declarations
   if (hint === StatementHint.IN_CLASS) {
