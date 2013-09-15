@@ -1,3 +1,8 @@
+enum ImplicitConversion {
+  NORMAL,
+  ASSIGNMENT,
+}
+
 class ResolverContext {
   constructor(
     public scope: Scope,
@@ -300,7 +305,7 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
     }
   }
 
-  checkImplicitConversion(type: WrappedType, node: Expression) {
+  checkImplicitConversion(type: WrappedType, node: Expression, kind: ImplicitConversion) {
     if (type.isError() || node.computedType.isError()) {
       return;
     }
@@ -312,7 +317,9 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
     }
 
     // Make sure casting to a value type involves a copy or a move
-    if (!type.isPointer() && type.isObject() && !(node instanceof CopyExpression) && !(node instanceof MoveExpression)) {
+    var isMoveOrCopy: boolean = node instanceof CopyExpression || node instanceof MoveExpression;
+    var needsMoveOrCopy: boolean = type.isObject() && (type.isValue() || type.isReference() && kind === ImplicitConversion.ASSIGNMENT);
+    if (needsMoveOrCopy && !isMoveOrCopy) {
       semanticErrorNeedMoveOrCopy(this.log, node.range, node.computedType, type);
       return;
     }
@@ -325,7 +332,7 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
     }
 
     args.forEach((n, i) => {
-      this.checkImplicitConversion(type.args[i], n);
+      this.checkImplicitConversion(type.args[i], n, ImplicitConversion.NORMAL);
     });
   }
 
@@ -475,7 +482,7 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
     }
 
     this.resolveAsExpression(node.test);
-    this.checkImplicitConversion(NativeTypes.BOOL.wrapValue(), node.test);
+    this.checkImplicitConversion(NativeTypes.BOOL.wrapValue(), node.test, ImplicitConversion.NORMAL);
     this.visitBlock(node.thenBlock);
     if (node.elseBlock !== null) {
       this.visitBlock(node.elseBlock);
@@ -489,7 +496,7 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
     }
 
     this.resolveAsExpression(node.test);
-    this.checkImplicitConversion(NativeTypes.BOOL.wrapValue(), node.test);
+    this.checkImplicitConversion(NativeTypes.BOOL.wrapValue(), node.test, ImplicitConversion.NORMAL);
     this.pushContext(this.context.cloneForLoop());
     this.visitBlock(node.block);
     this.popContext();
@@ -506,7 +513,7 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
     }
     if (node.test !== null) {
       this.resolveAsExpression(node.test);
-      this.checkImplicitConversion(NativeTypes.BOOL.wrapValue(), node.test);
+      this.checkImplicitConversion(NativeTypes.BOOL.wrapValue(), node.test, ImplicitConversion.NORMAL);
     }
     if (node.update !== null) {
       this.resolveAsExpression(node.update);
@@ -525,7 +532,7 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
     var returnType: WrappedType = this.context.enclosingFunction.result;
     if (node.value !== null) {
       this.resolveAsExpression(node.value);
-      this.checkImplicitConversion(returnType, node.value);
+      this.checkImplicitConversion(returnType, node.value, ImplicitConversion.NORMAL);
     } else if (!returnType.isVoid()) {
       semanticErrorExpectedReturnValue(this.log, node.range, returnType);
     }
@@ -601,16 +608,12 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
       this.pushContext(this.context.cloneForVariable(node.symbol));
       this.resolveAsExpression(node.value);
       this.popContext();
-      this.checkImplicitConversion(node.symbol.type, node.value);
+      this.checkImplicitConversion(node.symbol.type, node.value, ImplicitConversion.NORMAL);
     }
 
     // Value types must be constructable with no arguments
-    else if (node.type.computedType.isObject() && node.type.computedType.isValue() &&
-        !node.symbol.isArgument && node.symbol.enclosingObject === null) {
-      var objectType: ObjectType = node.type.computedType.asObject();
-      if (objectType.constructorType().args.length > 0) {
-        semanticErrorVariableNeedsValue(this.log, node.id.range, node.type.computedType);
-      }
+    else if (!node.symbol.isArgument && node.symbol.enclosingObject === null && !TypeLogic.hasDefaultConstructor(node.symbol.type)) {
+      semanticErrorVariableNeedsValue(this.log, node.id.range, node.type.computedType);
     }
   }
 
@@ -765,7 +768,7 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
 
     // Special-case assignment logic
     if (node.isAssignment()) {
-      this.checkImplicitConversion(left, node.right);
+      this.checkImplicitConversion(left, node.right, ImplicitConversion.ASSIGNMENT);
       this.checkStorage(node.left);
       node.computedType = left;
       return;
@@ -833,7 +836,7 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
 
   visitTernaryExpression(node: TernaryExpression) {
     this.resolveAsExpression(node.value);
-    this.checkImplicitConversion(NativeTypes.BOOL.wrapValue(), node.value);
+    this.checkImplicitConversion(NativeTypes.BOOL.wrapValue(), node.value, ImplicitConversion.NORMAL);
     this.resolveAsExpression(node.trueValue);
     this.resolveAsExpression(node.falseValue);
 

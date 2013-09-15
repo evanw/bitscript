@@ -43,7 +43,8 @@ class TypeLogic {
     if (from.isNull() && to.isPointer()) return true;
     if (from.isObject() && to.isObject()) {
       return TypeLogic.isBaseTypeOf(from.asObject(), to.asObject()) && // Upcasting is implicit
-        to.isPointer() || TypeLogic.equal(from.innerType, to.innerType); // Forbid slicing via copy
+        from.isPointer() && to.isPointer() ||
+        !from.isPointer() && !to.isPointer() && TypeLogic.equal(from.innerType, to.innerType); // Forbid slicing via copy
     }
     return TypeLogic.equal(from.innerType, to.innerType);
   }
@@ -65,7 +66,8 @@ class TypeLogic {
     if (from.isNumeric() && to.isNumeric()) return true;
     if (from.isObject() && to.isObject()) {
       return TypeLogic.isBaseTypeOf(to.asObject(), from.asObject()) && // Downcasting is explicit
-        to.isPointer() || TypeLogic.equal(from.innerType, to.innerType); // Forbid slicing via copy
+        from.isPointer() && to.isPointer() ||
+        !from.isPointer() && !to.isPointer() && TypeLogic.equal(from.innerType, to.innerType); // Forbid slicing via copy
     }
     return TypeLogic.canImplicitlyConvert(from, to);
   }
@@ -149,5 +151,10 @@ class TypeLogic {
 
   static isValidVariableType(type: WrappedType): boolean {
     return !type.isVoid() && (!type.isValue() || !type.isObject() || !type.asObject().isAbstract());
+  }
+
+  static hasDefaultConstructor(type: WrappedType): boolean {
+    return type.isPointer() || type.isPrimitive() ||
+      type.isObject() && type.isValue() && type.asObject().constructorType().args.length === 0;
   }
 }
