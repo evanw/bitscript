@@ -122,16 +122,24 @@ function parseStatement(context: ParserContext, hint: StatementHint): Statement 
       context.eat('move') ? FunctionKind.MOVE_DESTRUCTOR :
       FunctionKind.NORMAL;
     if (functionKind !== FunctionKind.NORMAL) {
-      var args: VariableDeclaration[] = parseArguments(context); if (args === null) return null;
+      var isDefault: boolean = false;
+      var type: Expression = null;
+      var args: VariableDeclaration[] = [];
       var initializers: Initializer[] = [];
-      if (context.eat(':')) {
-        initializers = parseInitializers(context); if (initializers === null) return null;;
-      }
       var block: Block = null;
-      if (!context.eat(';')) {
-        block = parseBlock(context, StatementHint.NORMAL); if (block === null) return null;
+      if (context.eat('=')) {
+        if (!context.expect('default') || !context.expect(';')) return null;
+        isDefault = true;
+      } else {
+        args = parseArguments(context); if (args === null) return null;
+        if (context.eat(':')) {
+          initializers = parseInitializers(context); if (initializers === null) return null;;
+        }
+        if (!context.eat(';')) {
+          block = parseBlock(context, StatementHint.NORMAL); if (block === null) return null;
+        }
       }
-      return new FunctionDeclaration(context.spanSince(range), id, modifiers, functionKind, null, initializers, args, block);
+      return new FunctionDeclaration(context.spanSince(range), id, modifiers, functionKind, isDefault, type, initializers, args, block);
     }
   }
 
@@ -160,12 +168,14 @@ function parseStatement(context: ParserContext, hint: StatementHint): Statement 
 
     // Function declaration
     if (context.peek('(')) {
+      var isDefault: boolean = false;
       var args: VariableDeclaration[] = parseArguments(context); if (args === null) return null;
+      var initializers: Initializer[] = [];
       var block: Block = null;
       if (!context.eat(';')) {
         block = parseBlock(context, StatementHint.NORMAL); if (block === null) return null;
       }
-      return new FunctionDeclaration(context.spanSince(range), id, modifiers, FunctionKind.NORMAL, type, [], args, block);
+      return new FunctionDeclaration(context.spanSince(range), id, modifiers, FunctionKind.NORMAL, isDefault, type, initializers, args, block);
     }
 
     // Variable declaration

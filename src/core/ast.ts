@@ -277,6 +277,7 @@ class FunctionDeclaration extends Declaration {
     id: Identifier,
     modifiers: number,
     public kind: FunctionKind,
+    public isDefault: boolean,
     public result: Expression,
     public initializers: Initializer[],
     public args: VariableDeclaration[],
