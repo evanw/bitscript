@@ -61,6 +61,15 @@ class TypeLogic {
            TypeLogic.checkImplicitConversionTypeModifiers(from, to);
   }
 
+  static canExplicitlyConvert(from: WrappedType, to: WrappedType): boolean {
+    if (from.isNumeric() && to.isNumeric()) return true;
+    if (from.isObject() && to.isObject()) {
+      return TypeLogic.isBaseTypeOf(to.asObject(), from.asObject()) && // Downcasting is explicit
+        !to.isValue() || TypeLogic.equal(from.innerType, to.innerType); // Forbid slicing via copy
+    }
+    return TypeLogic.canImplicitlyConvert(from, to);
+  }
+
   static commonImplicitType(a: WrappedType, b: WrappedType): WrappedType {
     if (TypeLogic.canImplicitlyConvert(a, b)) return b.withoutModifier(TypeModifier.STORAGE);
     if (TypeLogic.canImplicitlyConvert(b, a)) return a.withoutModifier(TypeModifier.STORAGE);

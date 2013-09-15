@@ -34,7 +34,7 @@ function semanticErrorDuplicateSymbol(log: Log, range: SourceRange, symbol: Symb
 }
 
 function semanticErrorIncompatibleTypes(log: Log, range: SourceRange, from: WrappedType, to: WrappedType) {
-  log.error(range, 'cannot convert from ' + from + ' to ' + to);
+  log.error(range, 'cannot convert from ' + from + ' to ' + to + (TypeLogic.canExplicitlyConvert(from, to) ? ' without a cast' : ''));
 }
 
 function semanticErrorNeedMoveOrCopy(log: Log, range: SourceRange, from: WrappedType, to: WrappedType) {
