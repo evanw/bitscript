@@ -53,7 +53,11 @@ function parseType(context: ParserContext): Expression {
     context.eat('*') ? TypeKind.POINTER :
     context.eat('&') ? TypeKind.REFERENCE :
     TypeKind.VALUE;
-  return new TypeKindExpression(context.spanSince(range), value, kind);
+  if (context.peek('*') || context.peek('&')) {
+    syntaxErrorUnexpectedToken(context.log, context.current());
+    return null;
+  }
+  return kind === TypeKind.VALUE ? value : new TypeKindExpression(context.spanSince(range), value, kind);
 }
 
 function parseArguments(context: ParserContext): VariableDeclaration[] {
@@ -71,12 +75,21 @@ function parseArguments(context: ParserContext): VariableDeclaration[] {
 
 function parseInitializers(context: ParserContext): Initializer[] {
   var initializers: Initializer[] = [];
+  if (context.peek('super')) {
+    var token: Token = context.next();
+    var id: Identifier = new Identifier(token.range, token.text);
+    if (!context.expect('(')) return null;
+    var values: Expression[] = parseExpressions(context); if (values === null) return null;
+    if (!context.expect(')')) return null;
+    initializers.push(new Initializer(context.spanSince(id.range), id, values));
+    if (!context.eat(',')) return initializers;
+  }
   do {
     var id: Identifier = parseIdentifier(context); if (id === null) return null;
     if (!context.expect('(')) return null;
     var value: Expression = pratt.parse(context, Power.LOWEST); if (value === null) return null;
     if (!context.expect(')')) return null;
-    initializers.push(new Initializer(context.spanSince(id.range), id, value));
+    initializers.push(new Initializer(context.spanSince(id.range), id, [value]));
   } while(context.eat(','));
   return initializers;
 }
@@ -115,6 +128,7 @@ function parseStatement(context: ParserContext, hint: StatementHint): Statement 
 
   // Special function declarations
   if (hint === StatementHint.IN_CLASS) {
+    var token: Token = context.current();
     var functionKind: FunctionKind =
       context.eat('new') ? FunctionKind.CONSTRUCTOR :
       context.eat('copy') ? FunctionKind.COPY_CONSTRUCTOR :
@@ -122,6 +136,7 @@ function parseStatement(context: ParserContext, hint: StatementHint): Statement 
       context.eat('move') ? FunctionKind.MOVE_DESTRUCTOR :
       FunctionKind.NORMAL;
     if (functionKind !== FunctionKind.NORMAL) {
+      var id: Identifier = new Identifier(token.range, token.text);
       var isDefault: boolean = false;
       var type: Expression = null;
       var args: VariableDeclaration[] = [];
@@ -309,6 +324,7 @@ pratt.prefix('!', Power.UNARY, buildUnaryPrefix);
 pratt.prefix('~', Power.UNARY, buildUnaryPrefix);
 pratt.prefix('*', Power.UNARY, buildUnaryPrefix);
 pratt.prefix('&', Power.UNARY, buildUnaryPrefix);
+pratt.prefix('copy', Power.UNARY, (context, token, node) => new CopyExpression(spanRange(token.range, node.range), node));
 pratt.prefix('move', Power.UNARY, (context, token, node) => new MoveExpression(spanRange(token.range, node.range), node));
 
 // Binary expressions
@@ -357,11 +373,18 @@ pratt.parselet('?', Power.TERNARY).infix = (context, left) => {
   return new TernaryExpression(context.spanSince(left.range), left, middle, right);
 };
 
-// Member expression
+// Value member expression
 pratt.parselet('.', Power.MEMBER).infix = (context, left) => {
   var token: Token = context.next();
   var id: Identifier = parseIdentifier(context); if (id === null) return null;
-  return new MemberExpression(context.spanSince(left.range), left, id);
+  return new MemberExpression(context.spanSince(left.range), '.', left, id);
+};
+
+// Pointer member expression
+pratt.parselet('->', Power.MEMBER).infix = (context, left) => {
+  var token: Token = context.next();
+  var id: Identifier = parseIdentifier(context); if (id === null) return null;
+  return new MemberExpression(context.spanSince(left.range), '->', left, id);
 };
 
 // Call expression

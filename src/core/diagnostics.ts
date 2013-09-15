@@ -37,6 +37,14 @@ function semanticErrorIncompatibleTypes(log: Log, range: SourceRange, from: Wrap
   log.error(range, 'cannot convert from ' + from + ' to ' + to);
 }
 
+function semanticErrorNeedMoveOrCopy(log: Log, range: SourceRange, from: WrappedType, to: WrappedType) {
+  log.error(range, 'need "move" or "copy" to convert from ' + from + ' to ' + to);
+}
+
+function semanticErrorBadMoveOrCopy(log: Log, range: SourceRange, type: WrappedType, name: string) {
+  log.error(range, 'cannot ' + name + ' ' + type);
+}
+
 function semanticErrorCircularType(log: Log, range: SourceRange) {
   log.error(range, 'circular type');
 }
@@ -49,8 +57,8 @@ function semanticErrorUnexpectedExpression(log: Log, range: SourceRange, type: W
   log.error(range, 'unexpected ' + type);
 }
 
-function semanticErrorInvalidPointerKind(log: Log, range: SourceRange, type: WrappedType) {
-  log.error(range, 'cannot make a pointer to ' + type);
+function semanticErrorInvalidTypeKind(log: Log, range: SourceRange, type: WrappedType, kind: TypeKind) {
+  log.error(range, 'cannot make a ' + (kind === TypeKind.POINTER ? 'pointer' : 'reference') + ' to ' + type);
 }
 
 function semanticErrorUnexpectedStatement(log: Log, range: SourceRange, text: string) {
@@ -175,4 +183,8 @@ function semanticErrorBadVariableType(log: Log, range: SourceRange, type: Wrappe
 
 function semanticErrorVariableNeedsValue(log: Log, range: SourceRange, type: WrappedType) {
   log.error(range, 'variable of ' + type + ' must be initialized');
+}
+
+function semanticErrorWrongMemberOperator(log: Log, range: SourceRange, type: WrappedType, op: string) {
+  log.error(range, 'use ' + op + ' to access members of ' + type.withoutModifier(TypeModifier.INSTANCE));
 }

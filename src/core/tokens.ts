@@ -10,15 +10,16 @@ function tokenize(log: Log, source: Source): Token[] {
   // Lists for tokenizing
   var operators: string[] = [
     '\\(', '\\)', '\\{', '\\}', '\\[', '\\]',
-    '\\.', '~', ',', ';', '\\?', ':',
+    '\\.', '~', ',', ';', '\\?', ':', '->',
     '\\+\\+', '--', '&&', '\\|\\|',
     '\\+=', '-=', '\\*=', '/=', '%=', '&=', '\\|=', '\\^=', '>>>=', '<<=', '>>=',
     '\\+', '-', '\\*', '/', '%', '&', '\\|', '\\^', '>>>', '<<', '>>',
     '!=', '==', '<=', '>=', '<', '>', '!', '=',
   ];
   var keywords: string[] = [
-    'if', 'else', 'while', 'for', 'continue', 'break', 'return', 'class', 'default',
-    'true', 'false', 'null', 'this',
+    'if', 'else', 'while', 'for', 'continue', 'break', 'return',
+    'class', 'interface', 'default', 'where',
+    'true', 'false', 'null', 'this', 'super',
     'new', 'move', 'copy', 'delete',
     'over', 'final', 'static',
   ];

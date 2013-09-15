@@ -1,8 +1,3 @@
-function spanRange(start: SourceRange, end: SourceRange): SourceRange {
-  assert(start.source === end.source && start.start.index <= end.end.index);
-  return new SourceRange(start.source, start.start, end.end);
-}
-
 class ParserContext {
   index: number = 0;
 

@@ -262,7 +262,7 @@ class Initializer extends AST {
   constructor(
     range: SourceRange,
     public id: Identifier,
-    public value: Expression) {
+    public values: Expression[]) {
     super(range);
   }
 }
@@ -439,6 +439,7 @@ class MemberExpression extends Expression {
 
   constructor(
     range: SourceRange,
+    public op: string,
     public value: Expression,
     public id: Identifier) {
     super(range);

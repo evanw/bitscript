@@ -57,6 +57,16 @@ function nextMultipleOf(size: number, align: number): number {
   return size + (align - size % align) % align;
 }
 
+function spanRange(start: SourceRange, end: SourceRange): SourceRange {
+  assert(start.source === end.source && start.start.index <= end.end.index);
+  return new SourceRange(start.source, start.start, end.end);
+}
+
+function innerRange(start: SourceRange, end: SourceRange): SourceRange {
+  assert(start.source === end.source && start.end.index <= end.start.index);
+  return new SourceRange(start.source, start.end, end.start);
+}
+
 class Source {
   lines: string[];
 

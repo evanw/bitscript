@@ -242,12 +242,12 @@ class WrappedType {
       this.innerType.asString() +
       (this.substitutions.length > 0 ? '<' + TypeLogic.filterSubstitutionsForType(
         this.substitutions, this.innerType).map(s => s.type.asString()).join(', ') + '>' : '') +
-      (this.isPointer() ? '*' : this.isReference() ? '&' : '')
+      (this.isPointer() ? ' *' : this.isReference() ? ' &' : '')
     );
   }
 
   toString(): string {
-    return (this.isInstance() ? this.isPointer() ? 'pointer to ' : this.isReference() ? 'reference to ' : 'value of ' : '') + 'type ' + this.asString();
+    return (this.isInstance() ? this.isPointer() ? 'pointer of ' : this.isReference() ? 'reference of ' : 'value of ' : '') + 'type ' + this.asString();
   }
 
   withKind(kind: TypeKind): WrappedType {
