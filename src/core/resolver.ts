@@ -1,13 +1,18 @@
 class ResolverContext {
   constructor(
     public scope: Scope,
+    public staticContext: boolean,
     public enclosingLoop: boolean,
     public enclosingObject: ObjectType,
     public enclosingFunction: FunctionType) {
   }
 
   static globalContext(scope: Scope): ResolverContext {
-    return new ResolverContext(scope, false, null, null);
+    return new ResolverContext(scope, false, false, null, null);
+  }
+
+  canAccessThis(): boolean {
+    return this.isInObject() && !this.staticContext;
   }
 
   isInLoop(): boolean {
@@ -25,32 +30,40 @@ class ResolverContext {
   clone(): ResolverContext {
     return new ResolverContext(
       this.scope,
+      this.staticContext,
       this.enclosingLoop,
       this.enclosingObject,
       this.enclosingFunction);
   }
 
-  cloneWithScope(scope: Scope) {
+  cloneWithScope(scope: Scope): ResolverContext {
     var clone = this.clone();
     clone.scope = scope;
     return clone;
   }
 
-  cloneForLoop() {
+  cloneForLoop(): ResolverContext {
     var clone = this.clone();
     clone.enclosingLoop = true;
     return clone;
   }
 
-  cloneForObject(objectType: ObjectType) {
+  cloneForObject(symbol: Symbol): ResolverContext {
     var clone = this.clone();
-    clone.enclosingObject = objectType;
+    clone.enclosingObject = symbol.type.asObject();
     return clone;
   }
 
-  cloneForFunction(functionType: FunctionType) {
+  cloneForFunction(symbol: Symbol): ResolverContext {
     var clone = this.clone();
-    clone.enclosingFunction = functionType;
+    clone.staticContext = symbol.isStatic();
+    clone.enclosingFunction = symbol.type.asFunction();
+    return clone;
+  }
+
+  cloneForVariable(symbol: Symbol): ResolverContext {
+    var clone = this.clone();
+    clone.staticContext = true;
     return clone;
   }
 }
@@ -552,7 +565,7 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
     }
 
     this.ensureDeclarationIsInitialized(node);
-    this.pushContext(this.context.cloneForObject(node.symbol.type.asObject()));
+    this.pushContext(this.context.cloneForObject(node.symbol));
     this.visitBlock(node.block);
     this.popContext();
   }
@@ -574,7 +587,7 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
     node.args.forEach(n => n.acceptDeclarationVisitor(this));
 
     if (node.block !== null && node.symbol.type.isFunction()) {
-      this.pushContext(this.context.cloneForFunction(node.symbol.type.asFunction()));
+      this.pushContext(this.context.cloneForFunction(node.symbol));
       this.visitBlock(node.block);
       this.popContext();
     }
@@ -585,7 +598,9 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
 
     // Check the value
     if (node.value !== null) {
+      this.pushContext(this.context.cloneForVariable(node.symbol));
       this.resolveAsExpression(node.value);
+      this.popContext();
       this.checkImplicitCast(node.symbol.type, node.value);
     }
 
@@ -607,16 +622,28 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
       return;
     }
 
+    // Validate static vs instance
+    if (!node.symbol.isStatic() && node.symbol.enclosingObject !== null && !this.context.canAccessThis()) {
+      semanticErrorMemberUnexpectedInstance(this.log, node.range, node.symbol.name);
+      return;
+    }
+
     node.computedType = node.symbol.type;
   }
 
   visitCopyExpression(node: CopyExpression) {
     this.resolveAsExpression(node.value);
 
+    // Can't chain moves and copies
+    if (node.value instanceof MoveExpression || node.value instanceof CopyExpression) {
+      semanticErrorNestedMoveOrCopy(this.log, node.value.range, 'copy');
+      return;
+    }
+
     // Validate the type
     var type: WrappedType = node.value.computedType;
     if (!type.isError() && type.isPointer()) {
-      semanticErrorBadMoveOrCopy(this.log, node.value.range, type, 'move');
+      semanticErrorBadMoveOrCopy(this.log, node.value.range, type, 'copy');
       return;
     }
 
@@ -625,6 +652,12 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
 
   visitMoveExpression(node: MoveExpression) {
     this.resolveAsExpression(node.value);
+
+    // Can't chain moves and copies
+    if (node.value instanceof MoveExpression || node.value instanceof CopyExpression) {
+      semanticErrorNestedMoveOrCopy(this.log, node.value.range, 'move');
+      return;
+    }
 
     // Validate the type
     var type: WrappedType = node.value.computedType;
@@ -799,7 +832,7 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
   }
 
   visitMemberExpression(node: MemberExpression) {
-    this.resolveAsExpression(node.value);
+    this.resolve(node.value);
 
     // Avoid reporting further errors
     var type: WrappedType = node.value.computedType;
@@ -818,6 +851,15 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
     node.symbol = this.findMemberSymbol(objectType, node.id);
     if (node.symbol === null) {
       semanticErrorUnknownMemberSymbol(this.log, node.id.range, node.id.name, type);
+      return;
+    }
+
+    // Validate static vs instance
+    if (type.isInstance() && node.symbol.isStatic()) {
+      semanticErrorMemberUnexpectedStatic(this.log, node.id.range, node.symbol.name);
+      return;
+    } else if (!type.isInstance() && !node.symbol.isStatic()) {
+      semanticErrorMemberUnexpectedInstance(this.log, node.id.range, node.symbol.name);
       return;
     }
 
@@ -851,7 +893,7 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
   }
 
   visitThisExpression(node: ThisExpression) {
-    if (!this.context.isInObject()) {
+    if (!this.context.canAccessThis()) {
       semanticErrorUnexpectedStatement(this.log, node.range, 'this expression');
       return;
     }

@@ -140,7 +140,7 @@ function semanticErrorOverrideDifferentTypes(log: Log, range: SourceRange, name:
 }
 
 function semanticErrorAbstractNew(log: Log, node: Expression) {
-  log.error(node.range, 'cannot use new on abstract ' + node.computedType);
+  log.error(node.range, 'cannot construct abstract ' + node.computedType);
 }
 
 function semanticErrorCannotParameterize(log: Log, range: SourceRange, type: WrappedType) {
@@ -178,7 +178,7 @@ function semanticErrorExpectedMove(log: Log, range: SourceRange, type: WrappedTy
 }
 
 function semanticErrorBadVariableType(log: Log, range: SourceRange, type: WrappedType) {
-  log.error(range, 'cannot create variable of ' + type);
+  log.error(range, 'cannot create variable of ' + (type.isObject() && type.asObject().isAbstract() ? 'abstract ' : '') + type);
 }
 
 function semanticErrorVariableNeedsValue(log: Log, range: SourceRange, type: WrappedType) {
@@ -187,4 +187,16 @@ function semanticErrorVariableNeedsValue(log: Log, range: SourceRange, type: Wra
 
 function semanticErrorWrongMemberOperator(log: Log, range: SourceRange, type: WrappedType, op: string) {
   log.error(range, 'use ' + op + ' to access members of ' + type.withoutModifier(TypeModifier.INSTANCE));
+}
+
+function semanticErrorNestedMoveOrCopy(log: Log, range: SourceRange, name: string) {
+  log.error(range, 'cannot use ' + name + ' on an expression that has already been moved or copied');
+}
+
+function semanticErrorMemberUnexpectedStatic(log: Log, range: SourceRange, name: string) {
+  log.error(range, 'cannot access static member ' + name + ' from instance context');
+}
+
+function semanticErrorMemberUnexpectedInstance(log: Log, range: SourceRange, name: string) {
+  log.error(range, 'cannot access instance member ' + name + ' from static context');
 }
