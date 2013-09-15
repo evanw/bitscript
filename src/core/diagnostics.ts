@@ -107,6 +107,10 @@ function semanticErrorNoCommonType(log: Log, range: SourceRange, a: WrappedType,
   log.error(range, 'no common type for ' + a + ' and ' + b);
 }
 
+function semanticErrorDuplicateModifier(log: Log, range: SourceRange, modifier: string) {
+  log.error(range, 'duplicate modifier ' + modifier);
+}
+
 function semanticErrorUnexpectedModifier(log: Log, range: SourceRange, modifier: string, why: string) {
   log.error(range, 'cannot use the ' + modifier + ' modifier ' + why);
 }

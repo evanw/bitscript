@@ -26,17 +26,17 @@ function parseGroup(context: ParserContext): Expression {
   return value;
 }
 
-function parseBlock(context: ParserContext): Block {
+function parseBlock(context: ParserContext, hint: StatementHint): Block {
   var token: Token = context.current();
   if (!context.expect('{')) return null;
-  var statements: Statement[] = parseStatements(context); if (statements === null) return null;
+  var statements: Statement[] = parseStatements(context, hint); if (statements === null) return null;
   if (!context.expect('}')) return null;
   return new Block(context.spanSince(token.range), statements);
 }
 
 function parseBlockOrStatement(context: ParserContext): Block {
-  if (context.peek('{')) return parseBlock(context);
-  var statement: Statement = parseStatement(context);
+  if (context.peek('{')) return parseBlock(context, StatementHint.NORMAL);
+  var statement: Statement = parseStatement(context, StatementHint.NORMAL);
   if (statement === null) return null;
   return new Block(statement.range, [statement]);
 }
@@ -48,39 +48,92 @@ function parseIdentifier(context: ParserContext): Identifier {
 
 function parseType(context: ParserContext): Expression {
   var range: SourceRange = context.current().range;
-  var kind: TypeKind =
-    context.eat('owned') ? TypeKind.OWNED :
-    context.eat('ref') ? TypeKind.REF :
-    TypeKind.VALUE;
   var value: Expression = pratt.parse(context, Power.MEMBER - 1); if (value === null) return null;
-  return kind !== TypeKind.VALUE ? new TypeKindExpression(context.spanSince(range), value, kind) : value;
+  var kind: TypeKind =
+    context.eat('*') ? TypeKind.POINTER :
+    context.eat('&') ? TypeKind.REFERENCE :
+    TypeKind.VALUE;
+  return new TypeKindExpression(context.spanSince(range), value, kind);
 }
 
 function parseArguments(context: ParserContext): VariableDeclaration[] {
   var args: VariableDeclaration[] = [];
+  if (!context.expect('(')) return null;
   while (!context.peek(')')) {
     if (args.length > 0 && !context.expect(',')) return null;
     var type: Expression = parseType(context); if (type === null) return null;
     var id: Identifier = parseIdentifier(context); if (id === null) return null;
     args.push(new VariableDeclaration(spanRange(type.range, id.range), id, 0, type, null));
   }
+  if (!context.expect(')')) return null;
   return args;
 }
 
-function parseStatements(context: ParserContext): Statement[] {
+function parseInitializers(context: ParserContext): Initializer[] {
+  var initializers: Initializer[] = [];
+  do {
+    var id: Identifier = parseIdentifier(context); if (id === null) return null;
+    if (!context.expect('(')) return null;
+    var value: Expression = pratt.parse(context, Power.LOWEST); if (value === null) return null;
+    if (!context.expect(')')) return null;
+    initializers.push(new Initializer(context.spanSince(id.range), id, value));
+  } while(context.eat(','));
+  return initializers;
+}
+
+function parseStatements(context: ParserContext, hint: StatementHint): Statement[] {
   var statements: Statement[] = [];
   while (!context.peek('}') && !context.peek('END')) {
-    var statement: Statement = parseStatement(context); if (statement === null) return null;
+    var statement: Statement = parseStatement(context, hint); if (statement === null) return null;
     statements.push(statement);
   }
   return statements;
 }
 
-function parseStatement(context: ParserContext): Statement {
+enum StatementHint {
+  NORMAL,
+  IN_CLASS,
+}
+
+function parseStatement(context: ParserContext, hint: StatementHint): Statement {
   var range: SourceRange = context.current().range;
 
   // Parse symbol modifiers
-  var modifiers: number = context.eat('over') ? SymbolModifier.OVER : 0;
+  function modifier(name: string, flag: SymbolModifier): boolean {
+    var token: Token = context.current();
+    if (!context.eat(name)) return false;
+    if (modifiers & flag) semanticErrorDuplicateModifier(context.log, token.range, name);
+    modifiers |= flag;
+    return true;
+  }
+  var modifiers: number = 0;
+  while (
+    modifier('over', SymbolModifier.OVER) ||
+    modifier('final', SymbolModifier.FINAL) ||
+    modifier('static', SymbolModifier.STATIC)) {
+  }
+
+  // Special function declarations
+  if (hint === StatementHint.IN_CLASS) {
+    var functionKind: FunctionKind =
+      context.eat('new') ? FunctionKind.CONSTRUCTOR :
+      context.eat('copy') ? FunctionKind.COPY_CONSTRUCTOR :
+      context.eat('delete') ? FunctionKind.DESTRUCTOR :
+      context.eat('move') ? FunctionKind.MOVE_DESTRUCTOR :
+      FunctionKind.NORMAL;
+    if (functionKind !== FunctionKind.NORMAL) {
+      var args: VariableDeclaration[] = parseArguments(context); if (args === null) return null;
+      var initializers: Initializer[] = [];
+      if (context.eat(':')) {
+        initializers = parseInitializers(context); if (initializers === null) return null;;
+      }
+      var block: Block = null;
+      if (!context.eat(';')) {
+        block = parseBlock(context, StatementHint.NORMAL); if (block === null) return null;
+      }
+      return new FunctionDeclaration(context.spanSince(range), id, modifiers, functionKind, null, initializers, args, block);
+    }
+  }
 
   // Object declaration
   if (context.eat('class')) {
@@ -89,17 +142,14 @@ function parseStatement(context: ParserContext): Statement {
     if (context.eat(':')) {
       base = pratt.parse(context, Power.CALL); if (base === null) return null;
     }
-    var block: Block = parseBlock(context); if (block === null) return null;
+    var block: Block = parseBlock(context, StatementHint.IN_CLASS); if (block === null) return null;
     return new ObjectDeclaration(context.spanSince(range), id, modifiers, base, block);
   }
 
   // Disambiguate identifiers used in expressions from identifiers used
   // as types in symbol declarations by starting to parse a type and
   // switching over to parsing an expression if it doesn't work out
-  if (modifiers !== 0 ||
-      context.peek('IDENTIFIER') ||
-      context.peek('owned') ||
-      context.peek('ref')) {
+  if (modifiers !== 0 || context.peek('IDENTIFIER')) {
     var type: Expression = parseType(context); if (type === null) return null;
     if (modifiers === 0 && !context.peek('IDENTIFIER')) {
       var value: Expression = pratt.resume(context, Power.LOWEST, type); if (value === null) return null;
@@ -109,15 +159,13 @@ function parseStatement(context: ParserContext): Statement {
     var id: Identifier = parseIdentifier(context); if (id === null) return null;
 
     // Function declaration
-    var group: Token = context.current();
-    if (context.eat('(')) {
+    if (context.peek('(')) {
       var args: VariableDeclaration[] = parseArguments(context); if (args === null) return null;
-      if (!context.expect(')')) return null;
       var block: Block = null;
       if (!context.eat(';')) {
-        block = parseBlock(context); if (block === null) return null;
+        block = parseBlock(context, StatementHint.NORMAL); if (block === null) return null;
       }
-      return new FunctionDeclaration(context.spanSince(range), id, modifiers, type, args, block);
+      return new FunctionDeclaration(context.spanSince(range), id, modifiers, FunctionKind.NORMAL, type, [], args, block);
     }
 
     // Variable declaration
@@ -177,6 +225,13 @@ function parseStatement(context: ParserContext): Statement {
       if (!context.expect(';')) return null;
     }
     return new ReturnStatement(context.spanSince(range), value);
+  }
+
+  // Delete statement
+  if (context.eat('delete')) {
+    var value: Expression = pratt.parse(context, Power.LOWEST); if (value === null) return null;
+    if (!context.expect(';')) return null;
+    return new DeleteStatement(context.spanSince(range), value);
   }
 
   // Break statement
@@ -242,6 +297,8 @@ pratt.prefix('+', Power.UNARY, buildUnaryPrefix);
 pratt.prefix('-', Power.UNARY, buildUnaryPrefix);
 pratt.prefix('!', Power.UNARY, buildUnaryPrefix);
 pratt.prefix('~', Power.UNARY, buildUnaryPrefix);
+pratt.prefix('*', Power.UNARY, buildUnaryPrefix);
+pratt.prefix('&', Power.UNARY, buildUnaryPrefix);
 pratt.prefix('move', Power.UNARY, (context, token, node) => new MoveExpression(spanRange(token.range, node.range), node));
 
 // Binary expressions
@@ -270,6 +327,15 @@ pratt.infix('%', Power.MUL_DIV, buildBinary);
 // Parenthetic group
 pratt.parselet('(', Power.LOWEST).prefix = context => {
   return parseGroup(context);
+};
+
+// Cast expression
+pratt.parselet('START_CAST', Power.LOWEST).prefix = context => {
+  var token: Token = context.next();
+  var type: Expression = parseType(context); if (type === null) return null;
+  if (!context.expect('END_CAST')) return null;
+  var value: Expression = pratt.parse(context, Power.UNARY); if (value === null) return null;
+  return new CastExpression(context.spanSince(token.range), type, value);
 };
 
 // Ternary expression
@@ -317,7 +383,7 @@ pratt.parselet('START_PARAMETER_LIST', Power.MEMBER).infix = (context, left) => 
 function parse(log: Log, tokens: Token[]): Module {
   var context: ParserContext = new ParserContext(log, tokens);
   var range: SourceRange = context.current().range;
-  var statements: Statement[] = parseStatements(context); if (statements === null) return null;
+  var statements: Statement[] = parseStatements(context, StatementHint.NORMAL); if (statements === null) return null;
   if (!context.expect('END')) return null;
   range = context.spanSince(range);
   return new Module(range, new Block(range, statements));

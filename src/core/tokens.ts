@@ -17,9 +17,10 @@ function tokenize(log: Log, source: Source): Token[] {
     '!=', '==', '<=', '>=', '<', '>', '!', '=',
   ];
   var keywords: string[] = [
-    'if', 'else', 'while', 'for', 'continue', 'break', 'return',
-    'class', 'true', 'false', 'null', 'new', 'this', 'move',
-    'owned', 'ref', 'over',
+    'if', 'else', 'while', 'for', 'continue', 'break', 'return', 'class',
+    'true', 'false', 'null', 'this',
+    'new', 'move', 'copy', 'delete',
+    'over', 'final', 'static',
   ];
 
   // Regular expressions for tokenizing
@@ -91,6 +92,13 @@ function tokenize(log: Log, source: Source): Token[] {
 }
 
 function prepareTokens(tokens: Token[]): Token[] {
+  var kindsBeforeEndOfCast: string[] = [
+    '*', '&', 'END_PARAMETER_LIST',
+  ];
+  var kindsAfterEndOfCast: string[] = [
+    'IDENTIFIER', 'DOUBLE', 'INT', '~', '!', '(',
+    'true', 'false', 'null', 'this', 'new', 'move', 'copy',
+  ];
   var tokenStack: Token[] = [];
   var indexStack: number[] = [];
 
@@ -104,7 +112,7 @@ nextToken:
 
       // Stop parsing a type if we find a token that no type expression uses
       if (top.kind === '<' && token.kind !== '<' && token.kind[0] !== '>' && token.kind !== 'IDENTIFIER' &&
-          token.kind !== ',' && token.kind !== 'owned' && token.kind !== 'ref') {
+          token.kind !== ',' && token.kind !== '*' && token.kind !== '&') {
         tokenStack.pop();
         indexStack.pop();
       } else {
@@ -155,6 +163,16 @@ nextToken:
         if (match.kind === '<' && token.kind === '>') {
           match.kind = 'START_PARAMETER_LIST';
           token.kind = 'END_PARAMETER_LIST';
+        }
+
+        // Convert ( and ) into bounds for a cast depending on the next token
+        if (match.kind === '(' && token.kind === ')') {
+          assert(i + 1 < tokens.length); // We should at least get an END
+          if (kindsBeforeEndOfCast.indexOf(tokens[i - 1].kind) >= 0 ||
+              kindsAfterEndOfCast.indexOf(tokens[i + 1].kind) >= 0) {
+            match.kind = 'START_CAST';
+            token.kind = 'END_CAST';
+          }
         }
 
         // Stop the search since we found a match

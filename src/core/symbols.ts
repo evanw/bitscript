@@ -1,6 +1,7 @@
-// TODO: static members
 enum SymbolModifier {
   OVER = 1, // Is this symbol hiding another symbol from the base type?
+  FINAL = 2, // Are assignments to this symbol disallowed?
+  STATIC = 4, // Is this symbol defined on the type itself instead of an instance?
 }
 
 class Symbol {
@@ -8,7 +9,7 @@ class Symbol {
   node: Declaration = null;
   enclosingObject: ObjectType = null;
   overriddenSymbol: Symbol = null;
-  isOverridden: boolean = false;
+  overriddenBySymbols: Symbol[] = [];
   isAbstract: boolean = false;
   isArgument: boolean = false;
 
@@ -26,8 +27,20 @@ class Symbol {
     return (this.modifiers & SymbolModifier.OVER) !== 0;
   }
 
+  isFinal(): boolean {
+    return (this.modifiers & SymbolModifier.FINAL) !== 0;
+  }
+
+  isStatic(): boolean {
+    return (this.modifiers & SymbolModifier.STATIC) !== 0;
+  }
+
+  isOverridden(): boolean {
+    return this.overriddenBySymbols.length > 0;
+  }
+
   isVirtual(): boolean {
-    return this.isAbstract || this.isOverridden || this.overriddenSymbol !== null;
+    return this.isAbstract || this.isOver() || this.isOverridden();
   }
 
   originalOverriddenSymbol(): Symbol {
@@ -39,11 +52,6 @@ class Symbol {
   }
 }
 
-enum ForEachSymbol {
-  CONTINUE,
-  BREAK,
-}
-
 class Scope {
   // Note: All symbols are prefixed with ' ' to avoid collisions with native properties (i.e. __proto__)
   private _symbols: { [name: string]: Symbol } = {};
@@ -52,7 +60,6 @@ class Scope {
     public lexicalParent: Scope) {
   }
 
-  // Return value determines continue vs break
   symbols(): Symbol[] {
     var symbols: Symbol[] = [];
     for (var name in this._symbols) {
@@ -69,10 +76,6 @@ class Scope {
 
   replace(symbol: Symbol) {
     this._symbols[' ' + symbol.name] = symbol;
-  }
-
-  define(name: string, type: WrappedType): Symbol {
-    return this._symbols[' ' + name] = new Symbol(name, type, this);
   }
 
   find(name: string): Symbol {

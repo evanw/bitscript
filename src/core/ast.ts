@@ -92,6 +92,7 @@ interface StatementVisitor<T> {
   visitWhileStatement(node: WhileStatement): T;
   visitForStatement(node: ForStatement): T;
   visitReturnStatement(node: ReturnStatement): T;
+  visitDeleteStatement(node: DeleteStatement): T;
   visitBreakStatement(node: BreakStatement): T;
   visitContinueStatement(node: ContinueStatement): T;
   visitDeclaration(node: Declaration): T;
@@ -170,6 +171,18 @@ class ReturnStatement extends Statement {
   }
 }
 
+class DeleteStatement extends Statement {
+  constructor(
+    range: SourceRange,
+    public value: Expression) {
+    super(range);
+  }
+
+  acceptStatementVisitor<T>(visitor: StatementVisitor<T>): T {
+    return visitor.visitDeleteStatement(this);
+  }
+}
+
 class BreakStatement extends Statement {
   constructor(
     range: SourceRange) {
@@ -237,6 +250,23 @@ class ObjectDeclaration extends Declaration {
   }
 }
 
+enum FunctionKind {
+  NORMAL,
+  CONSTRUCTOR,
+  COPY_CONSTRUCTOR,
+  DESTRUCTOR,
+  MOVE_DESTRUCTOR,
+}
+
+class Initializer extends AST {
+  constructor(
+    range: SourceRange,
+    public id: Identifier,
+    public value: Expression) {
+    super(range);
+  }
+}
+
 class FunctionDeclaration extends Declaration {
   // Store a separate scope for the function arguments because the function
   // may be abstract, in which case we can't use the scope of the body block
@@ -246,7 +276,9 @@ class FunctionDeclaration extends Declaration {
     range: SourceRange,
     id: Identifier,
     modifiers: number,
+    public kind: FunctionKind,
     public result: Expression,
+    public initializers: Initializer[],
     public args: VariableDeclaration[],
     public block: Block) {
     super(range, id, modifiers);
@@ -278,7 +310,9 @@ class VariableDeclaration extends Declaration {
 
 interface ExpressionVisitor<T> {
   visitSymbolExpression(node: SymbolExpression): T;
+  visitCopyExpression(node: CopyExpression): T;
   visitMoveExpression(node: MoveExpression): T;
+  visitCastExpression(node: CastExpression): T;
   visitUnaryExpression(node: UnaryExpression): T;
   visitBinaryExpression(node: BinaryExpression): T;
   visitTernaryExpression(node: TernaryExpression): T;
@@ -317,10 +351,18 @@ class SymbolExpression extends Expression {
   }
 }
 
-// A move expression is the only way to convert from an owned L-value.
-// Originally you could transfer ownership with a simple assignment, but
-// that led to too many dangling pointer mistakes. This way, ownership
-// transfers are explicit and easy to see when reading your code.
+class CopyExpression extends Expression {
+  constructor(
+    range: SourceRange,
+    public value: Expression) {
+    super(range);
+  }
+
+  acceptExpressionVisitor<T>(visitor: ExpressionVisitor<T>): T {
+    return visitor.visitCopyExpression(this);
+  }
+}
+
 class MoveExpression extends Expression {
   constructor(
     range: SourceRange,
@@ -330,6 +372,19 @@ class MoveExpression extends Expression {
 
   acceptExpressionVisitor<T>(visitor: ExpressionVisitor<T>): T {
     return visitor.visitMoveExpression(this);
+  }
+}
+
+class CastExpression extends Expression {
+  constructor(
+    range: SourceRange,
+    public type: Expression,
+    public value: Expression) {
+    super(range);
+  }
+
+  acceptExpressionVisitor<T>(visitor: ExpressionVisitor<T>): T {
+    return visitor.visitCastExpression(this);
   }
 }
 

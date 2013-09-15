@@ -229,7 +229,7 @@ function filter(key, value) {
       key !== 'uniqueID' &&
       key !== 'computedType') {
     if (value instanceof AST) {
-      var obj = { kind: value.constructor.name };
+      var obj = { constructor: value.constructor.name };
       for (var k in value) {
         if (value.hasOwnProperty(k)) {
           obj[k] = value[k];
