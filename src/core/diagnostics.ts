@@ -66,7 +66,7 @@ function semanticErrorUnexpectedStatement(log: Log, range: SourceRange, text: st
 }
 
 function semanticErrorInvalidNew(log: Log, range: SourceRange, type: WrappedType) {
-  log.error(range, 'cannot use new on ' + type);
+  log.error(range, 'cannot construct ' + type);
 }
 
 function semanticErrorInvalidCall(log: Log, range: SourceRange, type: WrappedType) {
@@ -203,4 +203,8 @@ function semanticErrorMemberUnexpectedStatic(log: Log, range: SourceRange, name:
 
 function semanticErrorMemberUnexpectedInstance(log: Log, range: SourceRange, name: string) {
   log.error(range, 'cannot access instance member ' + name + ' from static context');
+}
+
+function semanticErrorImpliedMove(log: Log, range: SourceRange) {
+  log.error(range, 'move is already implied for value constructor calls');
 }

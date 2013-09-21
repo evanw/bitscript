@@ -305,6 +305,10 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
     }
   }
 
+  static isValueConstructorCall(node: Expression) {
+    return node instanceof CallExpression && (<CallExpression>node).isValueConstructorCall;
+  }
+
   checkImplicitConversion(type: WrappedType, node: Expression, kind: ImplicitConversion) {
     if (type.isError() || node.computedType.isError()) {
       return;
@@ -318,7 +322,8 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
 
     // Make sure casting to a value type involves a copy or a move
     var isMoveOrCopy: boolean = node instanceof CopyExpression || node instanceof MoveExpression;
-    var needsMoveOrCopy: boolean = type.isObject() && (type.isValue() || type.isReference() && kind === ImplicitConversion.ASSIGNMENT);
+    var needsMoveOrCopy: boolean = !Resolver.isValueConstructorCall(node) && type.isObject() &&
+      (type.isValue() || type.isReference() && kind === ImplicitConversion.ASSIGNMENT);
     if (needsMoveOrCopy && !isMoveOrCopy) {
       semanticErrorNeedMoveOrCopy(this.log, node.range, node.computedType, type);
       return;
@@ -650,6 +655,12 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
       return;
     }
 
+    // A value constructor call implies move
+    if (Resolver.isValueConstructorCall(node.value)) {
+      semanticErrorImpliedMove(this.log, node.range);
+      return;
+    }
+
     node.computedType = node.value.computedType;
   }
 
@@ -666,6 +677,12 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
     var type: WrappedType = node.value.computedType;
     if (!type.isError() && type.isPointer()) {
       semanticErrorBadMoveOrCopy(this.log, node.value.range, type, 'move');
+      return;
+    }
+
+    // A value constructor call implies move
+    if (Resolver.isValueConstructorCall(node.value)) {
+      semanticErrorImpliedMove(this.log, node.range);
       return;
     }
 
@@ -792,7 +809,7 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
           if (left.isNumeric() && right.isNumeric()) {
             result =
               left.isInt() && right.isInt() ? NativeTypes.INT :
-              left.isFloat() && right.isFloat() ? NativeTypes.FLOAT :
+              !left.isDouble() && !right.isDouble() ? NativeTypes.FLOAT :
               NativeTypes.DOUBLE;
           }
           break;
@@ -928,23 +945,51 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
   }
 
   visitCallExpression(node: CallExpression) {
-    this.resolveAsExpression(node.value);
+    this.resolve(node.value);
     node.args.forEach(n => this.resolveAsExpression(n));
 
     // Avoid reporting further errors
     if (node.value.computedType.isError()) {
       return;
     }
+    var type: WrappedType = node.value.computedType;
 
-    // Calls only work on function types
-    var functionType: FunctionType = node.value.computedType.asFunction();
-    if (functionType === null) {
-      semanticErrorInvalidCall(this.log, node.value.range, node.value.computedType);
-      return;
+    // Check for a function call
+    if (type.isInstance()) {
+      var functionType: FunctionType = type.asFunction();
+
+      // Calls only work on function types
+      if (functionType === null) {
+        semanticErrorInvalidCall(this.log, node.value.range, type);
+        return;
+      }
+
+      // Check argument types
+      this.checkCallArguments(node.range, functionType, node.args);
+      node.computedType = functionType.result;
     }
 
-    this.checkCallArguments(node.range, functionType, node.args);
-    node.computedType = functionType.result;
+    // Check for a constructor call
+    else {
+      node.isValueConstructorCall = true;
+
+      // New only works on raw object types
+      var objectType: ObjectType = type.asObject();
+      if (objectType === null || !type.isValue()) {
+        semanticErrorInvalidNew(this.log, node.value.range, type);
+        return;
+      }
+
+      // Cannot construct an abstract class
+      if (objectType.isAbstract()) {
+        semanticErrorAbstractNew(this.log, node.value);
+        return;
+      }
+
+      // Check argument types
+      this.checkCallArguments(node.range, objectType.constructorType(), node.args);
+      node.computedType = objectType.wrapValue();
+    }
   }
 
   visitNewExpression(node: NewExpression) {

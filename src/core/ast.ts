@@ -510,6 +510,8 @@ class ThisExpression extends Expression {
 }
 
 class CallExpression extends Expression {
+  isValueConstructorCall: boolean = false;
+
   constructor(
     range: SourceRange,
     public value: Expression,
