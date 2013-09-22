@@ -185,8 +185,8 @@ function semanticErrorBadVariableType(log: Log, range: SourceRange, type: Wrappe
   log.error(range, 'cannot create variable of ' + (type.isObject() && type.asObject().isAbstract() ? 'abstract ' : '') + type);
 }
 
-function semanticErrorVariableNeedsValue(log: Log, range: SourceRange, type: WrappedType) {
-  log.error(range, 'variable of ' + type + ' must be initialized');
+function semanticErrorVariableNeedsValue(log: Log, range: SourceRange, type: WrappedType, isFinal: boolean) {
+  log.error(range, (isFinal ? 'final ' : '') + 'variable of ' + type + ' must be initialized');
 }
 
 function semanticErrorWrongMemberOperator(log: Log, range: SourceRange, type: WrappedType, op: string) {
@@ -206,5 +206,9 @@ function semanticErrorMemberUnexpectedInstance(log: Log, range: SourceRange, nam
 }
 
 function semanticErrorImpliedMove(log: Log, range: SourceRange) {
-  log.error(range, 'move is already implied for value constructor calls');
+  log.error(range, 'move is already implied for temporary values');
+}
+
+function semanticErrorAssigmentToFinal(log: Log, range: SourceRange) {
+  log.error(range, 'cannot assign to final symbol');
 }

@@ -29,12 +29,12 @@ function tokenize(log: Log, source: Source): Token[] {
     '\\n',
     '//.*',
     '[ \\t]+',
-    '(?:\\b)[0-9]+(?:\\.[0-9]+)?\\b',
+    '(?:\\b)[0-9]+(?:\\.[0-9]+)?f?\\b',
     '\\b[A-Za-z_][A-Za-z\\$_0-9]*',
     '(?:' + operators.join('|') + ')',
   ].join('|') + ')');
   var isSpace: RegExp = new RegExp('^(?:[\\n \\t]|//|$)');
-  var isDouble: RegExp = new RegExp('^[0-9]');
+  var isNumeric: RegExp = new RegExp('^[0-9]');
   var isIdent: RegExp = new RegExp('^[A-Za-z\\_]');
   var isKeyword: RegExp = new RegExp('^(?:' + keywords.join('|') + ')$');
 
@@ -77,7 +77,7 @@ function tokenize(log: Log, source: Source): Token[] {
       continue;
     }
     else if (isIdent.test(part)) { if (!isKeyword.test(part)) kind = 'IDENTIFIER'; }
-    else if (isDouble.test(part)) kind = part.indexOf('.') >= 0 ? 'DOUBLE' : 'INT';
+    else if (isNumeric.test(part)) kind = part[part.length - 1] === 'f' ? 'FLOAT' : part.indexOf('.') >= 0 ? 'DOUBLE' : 'INT';
 
     // Create the new token
     var start: Marker = new Marker(index, line, index + columnAdjust);

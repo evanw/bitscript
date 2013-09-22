@@ -53,6 +53,8 @@ class TypeLogic {
     if (!from.isNull()) {
       if (from.substitutions.length !== to.substitutions.length) return false;
       if (from.substitutions.some(f => to.substitutions.every(t => f.parameter !== t.parameter || !TypeLogic.equalWrapped(f.type, t.type)))) return false;
+    } else if (to.isPointer()) {
+      return true;
     }
     return from.isPointer() === to.isPointer();
   }

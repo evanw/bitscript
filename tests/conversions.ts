@@ -1,4 +1,10 @@
 test([
+  'class Foo {}',
+  'Foo *foo() { return null; }',
+], [
+]);
+
+test([
   'class A {}',
   'class B : A {}',
   '',
@@ -386,10 +392,15 @@ test([
   '  ptr = _ptr();',
   '}',
 ], [
-  'error on line 12 of <stdin>: need "move" or "copy" to convert from value of type Foo to value of type Foo',
+  'error on line 13 of <stdin>: move is already implied for temporary values',
   '',
-  '  val = _val();',
-  '        ~~~~~~',
+  '  val = move _val();',
+  '        ~~~~~~~~~~~',
+  '',
+  'error on line 14 of <stdin>: move is already implied for temporary values',
+  '',
+  '  val = copy _val();',
+  '        ~~~~~~~~~~~',
   '',
   'error on line 15 of <stdin>: need "move" or "copy" to convert from reference of type Foo& to value of type Foo',
   '',
@@ -406,10 +417,15 @@ test([
   '  val = *_ptr();',
   '        ~~~~~~~',
   '',
-  'error on line 23 of <stdin>: need "move" or "copy" to convert from value of type Foo to reference of type Foo&',
+  'error on line 24 of <stdin>: move is already implied for temporary values',
   '',
-  '  ref = _val();',
-  '        ~~~~~~',
+  '  ref = move _val();',
+  '        ~~~~~~~~~~~',
+  '',
+  'error on line 25 of <stdin>: move is already implied for temporary values',
+  '',
+  '  ref = copy _val();',
+  '        ~~~~~~~~~~~',
   '',
   'error on line 26 of <stdin>: need "move" or "copy" to convert from reference of type Foo& to reference of type Foo&',
   '',

@@ -5,8 +5,9 @@ enum TypeKind {
 }
 
 enum TypeModifier {
-  STORAGE = 1, // Can this be stored to (is this an L-value)?
-  INSTANCE = 2, // Is this an instance of the type instead of the type itself?
+  FINAL = 1, // Did this come from a final variable?
+  STORAGE = 2, // Can this be stored to (is this an L-value)?
+  INSTANCE = 4, // Is this an instance of the type instead of the type itself?
 }
 
 class Type {
@@ -67,7 +68,7 @@ class FunctionType extends Type {
   }
 
   asString(): string {
-    return 'Function<' + this.args.concat(this.result).map(t => t.asString()).join(', ') + '>';
+    return this.result.asString() + ' function(' + this.args.map(t => t.asString()).join(', ') + ')';
   }
 }
 
@@ -163,6 +164,10 @@ class WrappedType {
 
   isReference(): boolean {
     return this.kind === TypeKind.REFERENCE;
+  }
+
+  isFinal(): boolean {
+    return (this.modifiers & TypeModifier.FINAL) !== 0;
   }
 
   isStorage(): boolean {

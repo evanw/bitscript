@@ -151,6 +151,9 @@ class DeclarationInitializer implements DeclarationVisitor<WrappedType> {
       this.resolver.ignoreModifier(node, SymbolModifier.STATIC, 'static', 'outside a class');
     }
 
+    // All function symbols are final
+    node.symbol.modifiers |= SymbolModifier.FINAL;
+
     // Special-case the return type for special functions
     var resultType: WrappedType;
     switch (node.kind) {
@@ -305,10 +308,6 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
     }
   }
 
-  static isValueConstructorCall(node: Expression) {
-    return node instanceof CallExpression && (<CallExpression>node).isValueConstructorCall;
-  }
-
   checkImplicitConversion(type: WrappedType, node: Expression, kind: ImplicitConversion) {
     if (type.isError() || node.computedType.isError()) {
       return;
@@ -322,8 +321,9 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
 
     // Make sure casting to a value type involves a copy or a move
     var isMoveOrCopy: boolean = node instanceof CopyExpression || node instanceof MoveExpression;
-    var needsMoveOrCopy: boolean = !Resolver.isValueConstructorCall(node) && type.isObject() &&
-      (type.isValue() || type.isReference() && kind === ImplicitConversion.ASSIGNMENT);
+    var needsMoveOrCopy: boolean = type.isObject() &&
+      (type.isValue() || type.isReference() && kind === ImplicitConversion.ASSIGNMENT) &&
+      (!node.computedType.isValue() || node.computedType.isStorage());
     if (needsMoveOrCopy && !isMoveOrCopy) {
       semanticErrorNeedMoveOrCopy(this.log, node.range, node.computedType, type);
       return;
@@ -339,12 +339,6 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
     args.forEach((n, i) => {
       this.checkImplicitConversion(type.args[i], n, ImplicitConversion.NORMAL);
     });
-  }
-
-  checkStorage(node: Expression) {
-    if (!node.computedType.isStorage()) {
-      semanticErrorBadStorage(this.log, node.range);
-    }
   }
 
   ensureDeclarationIsInitialized(node: Declaration) {
@@ -412,6 +406,20 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
     // Mark the override
     node.symbol.overriddenSymbol = symbol;
     symbol.overriddenBySymbols.push(node.symbol);
+  }
+
+  checkAssigment(node: Expression) {
+    // Can only assign to L-values
+    if (!node.computedType.isStorage()) {
+      semanticErrorBadStorage(this.log, node.range);
+      return;
+    }
+
+    // Final symbols can never be redefined
+    if (node.computedType.isFinal()) {
+      semanticErrorAssigmentToFinal(this.log, node.range);
+      return;
+    }
   }
 
   initializeSymbol(symbol: Symbol, range: SourceRange): Symbol {
@@ -617,8 +625,9 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
     }
 
     // Value types must be constructable with no arguments
-    else if (!node.symbol.isArgument && node.symbol.enclosingObject === null && !TypeLogic.hasDefaultConstructor(node.symbol.type)) {
-      semanticErrorVariableNeedsValue(this.log, node.id.range, node.type.computedType);
+    else if (!node.symbol.isArgument && node.symbol.enclosingObject === null &&
+        (node.symbol.isFinal() || !TypeLogic.hasDefaultConstructor(node.symbol.type))) {
+      semanticErrorVariableNeedsValue(this.log, node.id.range, node.type.computedType, node.symbol.isFinal());
     }
   }
 
@@ -636,7 +645,7 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
       return;
     }
 
-    node.computedType = node.symbol.type;
+    node.computedType = node.symbol.type.withModifier(node.symbol.isFinal() ? TypeModifier.FINAL : 0);
   }
 
   visitCopyExpression(node: CopyExpression) {
@@ -655,8 +664,8 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
       return;
     }
 
-    // A value constructor call implies move
-    if (Resolver.isValueConstructorCall(node.value)) {
+    // A temporary value implies move
+    if (type.isValue() && !type.isStorage()) {
       semanticErrorImpliedMove(this.log, node.range);
       return;
     }
@@ -680,8 +689,8 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
       return;
     }
 
-    // A value constructor call implies move
-    if (Resolver.isValueConstructorCall(node.value)) {
+    // A temporary value implies move
+    if (type.isValue() && !type.isStorage()) {
       semanticErrorImpliedMove(this.log, node.range);
       return;
     }
@@ -786,7 +795,7 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
     // Special-case assignment logic
     if (node.isAssignment()) {
       this.checkImplicitConversion(left, node.right, ImplicitConversion.ASSIGNMENT);
-      this.checkStorage(node.left);
+      this.checkAssigment(node.left);
       node.computedType = left;
       return;
     }
@@ -916,7 +925,7 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
 
     // Substitute the type parameters from the object into the member
     // node.computedType = TypeLogic.substitute(node.symbol.type, node.value.computedType.substitutions);
-    node.computedType = node.symbol.type;
+    node.computedType = node.symbol.type.withModifier(node.symbol.isFinal() ? TypeModifier.FINAL : 0);
   }
 
   visitIntExpression(node: IntExpression) {
@@ -925,6 +934,10 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
 
   visitBoolExpression(node: BoolExpression) {
     node.computedType = NativeTypes.BOOL.wrapValue();
+  }
+
+  visitFloatExpression(node: FloatExpression) {
+    node.computedType = NativeTypes.FLOAT.wrapValue();
   }
 
   visitDoubleExpression(node: DoubleExpression) {
@@ -971,8 +984,6 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
 
     // Check for a constructor call
     else {
-      node.isValueConstructorCall = true;
-
       // New only works on raw object types
       var objectType: ObjectType = type.asObject();
       if (objectType === null || !type.isValue()) {

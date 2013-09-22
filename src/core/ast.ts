@@ -320,6 +320,7 @@ interface ExpressionVisitor<T> {
   visitMemberExpression(node: MemberExpression): T;
   visitIntExpression(node: IntExpression): T;
   visitBoolExpression(node: BoolExpression): T;
+  visitFloatExpression(node: FloatExpression): T;
   visitDoubleExpression(node: DoubleExpression): T;
   visitNullExpression(node: NullExpression): T;
   visitThisExpression(node: ThisExpression): T;
@@ -475,6 +476,18 @@ class BoolExpression extends Expression {
   }
 }
 
+class FloatExpression extends Expression {
+  constructor(
+    range: SourceRange,
+    public value: number) {
+    super(range);
+  }
+
+  acceptExpressionVisitor<T>(visitor: ExpressionVisitor<T>): T {
+    return visitor.visitFloatExpression(this);
+  }
+}
+
 class DoubleExpression extends Expression {
   constructor(
     range: SourceRange,
@@ -510,8 +523,6 @@ class ThisExpression extends Expression {
 }
 
 class CallExpression extends Expression {
-  isValueConstructorCall: boolean = false;
-
   constructor(
     range: SourceRange,
     public value: Expression,
