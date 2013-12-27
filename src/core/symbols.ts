@@ -2,6 +2,8 @@ enum SymbolModifier {
   OVER = 1, // Is this symbol hiding another symbol from the base type?
   FINAL = 2, // Are assignments to this symbol disallowed?
   STATIC = 4, // Is this symbol defined on the type itself instead of an instance?
+  DELETE = 8, // Did the user forbid an implementation?
+  DEFAULT = 16, // Did the user request a default implementation?
 }
 
 class Symbol {

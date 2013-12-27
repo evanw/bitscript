@@ -26,13 +26,13 @@ SOURCES= \
 TESTS= \
 	tests/common.ts \
 	tests/conversions.ts \
-	tests/final.ts
+	tests/final.ts \
+	tests/circular.ts
 	# tests/cpp.ts \
 	# tests/js.ts \
 	# tests/statements.ts \
 	# tests/operators.ts \
 	# tests/modifiers.ts \
-	# tests/circular.ts \
 
 build:
 	$(TSC) $(SOURCES) src/core/cli.ts --sourcemap --out compiled.js

@@ -107,12 +107,21 @@ class DeclarationInitializer implements DeclarationVisitor<WrappedType> {
       // Base type is valid (no need to check for cycles since
       // cycle detection is done for all declarations anyway)
       type.baseType = baseType.asObject();
-      type.baseType.hasDerivedTypes = true;
+      type.baseType.derivedTypes.push(type);
 
       // Mix the symbols from the base scope in with this block's symbols
       // to make detecting abstract vs fully implemented types easier
       type.baseType.scope.symbols().forEach(s => node.block.scope.replace(s));
     }
+
+    // // Check for special functions
+    // node.block.statements.forEach(n => {
+    //   if (n instanceof FunctionDeclaration) {
+    //     type.functionKinds |= (<FunctionDeclaration>n).kind;
+    //   }
+    // });
+
+    // Add all default implementations if there are no special functions
 
     // Populate the block scope
     this.resolver.pushContext(this.resolver.context.cloneWithScope(node.block.scope));
@@ -126,16 +135,18 @@ class DeclarationInitializer implements DeclarationVisitor<WrappedType> {
       }
     });
 
-    // Lazily compute some class information (see ObjectType for the reason why)
-    type.lazyInitializer = () => {
-      node.block.scope.symbols().forEach(s => this.resolver.ensureDeclarationIsInitialized(s.node));
-      var baseArgTypes: WrappedType[] = type.baseType !== null ? type.baseType.constructorType().args : [];
-      var argTypes: WrappedType[] = node.block.statements
-        .filter(n => n instanceof VariableDeclaration && (<VariableDeclaration>n).value === null)
-        .map(n => (<VariableDeclaration>n).symbol.type);
-      type._isAbstract = node.block.scope.containsAbstractSymbols();
-      type._constructorType = new FunctionType(null, baseArgTypes.concat(argTypes));
-    };
+    // // Lazily compute some class information (see ObjectType for the reason why)
+    // type.lazyInitializer = () => {
+    //   node.block.scope.symbols().forEach(s => this.resolver.ensureDeclarationIsInitialized(s.node));
+    //   var baseArgTypes: WrappedType[] = type.baseType !== null ? type.baseType.constructorType().args : [];
+    //   var argTypes: WrappedType[] = node.block.statements
+    //     .filter(n => n instanceof VariableDeclaration && (<VariableDeclaration>n).value === null)
+    //     .map(n => (<VariableDeclaration>n).symbol.type);
+    //   type._isAbstract = node.block.scope.containsAbstractSymbols();
+    //   type._constructorType = new FunctionType(null, baseArgTypes.concat(argTypes));
+    // };
+    type.constructorType = new FunctionType(NativeTypes.ERROR.wrapValue(), []);
+    type.isAbstract = node.block.scope.containsAbstractSymbols();
 
     // TODO: A type is invalid if it contains, directly or indirectly,
     // infinite storage due to containing a value of itself
@@ -192,6 +203,12 @@ class DeclarationInitializer implements DeclarationVisitor<WrappedType> {
     });
     this.resolver.popContext();
 
+    // The constructor and destructor must not be abstract
+    if (node.symbol.isAbstract && (node.kind === FunctionKind.CONSTRUCTOR || node.kind === FunctionKind.DESTRUCTOR)) {
+      semanticErrorMustImplement(this.resolver.log, node.range, node.symbol.name);
+      return NativeTypes.ERROR.wrapValue();
+    }
+
     // Avoid reporting further errors
     if (resultType.isError() || args.some(t => t.isError())) {
       return NativeTypes.ERROR.wrapValue();
@@ -209,12 +226,6 @@ class DeclarationInitializer implements DeclarationVisitor<WrappedType> {
 
     // Resolve the type
     this.resolver.resolveAsType(node.type);
-
-    // Validate variable type
-    if (!TypeLogic.isValidVariableType(node.type.computedType)) {
-      semanticErrorBadVariableType(this.resolver.log, node.type.range, node.type.computedType);
-      return NativeTypes.ERROR.wrapValue();
-    }
 
     return node.type.computedType.withModifier(TypeModifier.INSTANCE | TypeModifier.STORAGE);
   }
@@ -616,6 +627,17 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
   visitVariableDeclaration(node: VariableDeclaration) {
     this.ensureDeclarationIsInitialized(node);
 
+    // Avoid reporting further errors
+    if (node.symbol.type.isError()) {
+      return;
+    }
+
+    // Validate variable type
+    if (!TypeLogic.isValidVariableType(node.type.computedType)) {
+      semanticErrorBadVariableType(this.log, node.type.range, node.type.computedType);
+      return;
+    }
+
     // Check the value
     if (node.value !== null) {
       this.pushContext(this.context.cloneForVariable(node.symbol));
@@ -992,13 +1014,13 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
       }
 
       // Cannot construct an abstract class
-      if (objectType.isAbstract()) {
+      if (objectType.isAbstract) {
         semanticErrorAbstractNew(this.log, node.value);
         return;
       }
 
       // Check argument types
-      this.checkCallArguments(node.range, objectType.constructorType(), node.args);
+      this.checkCallArguments(node.range, objectType.constructorType, node.args);
       node.computedType = objectType.wrapValue();
     }
   }
@@ -1021,12 +1043,12 @@ class Resolver implements StatementVisitor<void>, DeclarationVisitor<void>, Expr
     }
 
     // Cannot construct an abstract class
-    if (objectType.isAbstract()) {
+    if (objectType.isAbstract) {
       semanticErrorAbstractNew(this.log, node.type);
       return;
     }
 
-    this.checkCallArguments(node.range, objectType.constructorType(), node.args);
+    this.checkCallArguments(node.range, objectType.constructorType, node.args);
     node.computedType = type.withKind(TypeKind.POINTER).withModifier(TypeModifier.INSTANCE);
   }
 

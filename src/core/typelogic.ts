@@ -152,11 +152,11 @@ class TypeLogic {
   // }
 
   static isValidVariableType(type: WrappedType): boolean {
-    return !type.isVoid() && (!type.isValue() || !type.isObject() || !type.asObject().isAbstract());
+    return !type.isVoid() && (!type.isValue() || !type.isObject() || !type.asObject().isAbstract);
   }
 
   static hasDefaultConstructor(type: WrappedType): boolean {
     return type.isPointer() || type.isPrimitive() ||
-      type.isObject() && type.isValue() && type.asObject().constructorType().args.length === 0;
+      type.isObject() && type.isValue() && type.asObject().constructorType.args.length === 0;
   }
 }

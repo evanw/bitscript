@@ -36,18 +36,25 @@ test([
 ]);
 
 test([
+  'class A { C c; void foo(); } // This should not cause a circular type error',
+  'class B : A { int x; void foo(); }',
+  'class C { B b; } // This should be detected as abstract',
+], [
+]);
+
+test([
   'class A {',
-  '  B foo();',
+  '  B *foo();',
   '}',
   'class B : A {',
-  '  over B foo() { // This line should not cause a circular type error',
+  '  over B *foo() { // This line should not cause a circular type error',
   '    new A(); // This should be detected as abstract',
   '    new B(); // This should not be detected as abstract',
   '    return this;',
   '  }',
   '}',
 ], [
-  'error on line 6 of <stdin>: cannot use new on abstract type A',
+  'error on line 6 of <stdin>: cannot construct abstract type A',
   '',
   '    new A(); // This should be detected as abstract',
   '        ^',
@@ -77,12 +84,12 @@ test([
   '  new Bar(); // This should be detected as abstract',
   '}',
 ], [
-  'error on line 3 of <stdin>: cannot use new on abstract type Bar',
+  'error on line 3 of <stdin>: cannot construct abstract type Bar',
   '',
   '  new Bar(); // This should be detected as abstract',
   '      ~~~',
   '',
-  'error on line 9 of <stdin>: cannot use new on abstract type Bar',
+  'error on line 9 of <stdin>: cannot construct abstract type Bar',
   '',
   '  new Bar(); // This should be detected as abstract',
   '      ~~~',

@@ -250,14 +250,6 @@ class ObjectDeclaration extends Declaration {
   }
 }
 
-enum FunctionKind {
-  NORMAL,
-  CONSTRUCTOR,
-  COPY_CONSTRUCTOR,
-  DESTRUCTOR,
-  MOVE_DESTRUCTOR,
-}
-
 class Initializer extends AST {
   constructor(
     range: SourceRange,
@@ -277,7 +269,6 @@ class FunctionDeclaration extends Declaration {
     id: Identifier,
     modifiers: number,
     public kind: FunctionKind,
-    public isDefault: boolean,
     public result: Expression,
     public initializers: Initializer[],
     public args: VariableDeclaration[],

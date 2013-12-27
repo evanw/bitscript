@@ -182,7 +182,7 @@ function semanticErrorBadCastType(log: Log, range: SourceRange, type: WrappedTyp
 }
 
 function semanticErrorBadVariableType(log: Log, range: SourceRange, type: WrappedType) {
-  log.error(range, 'cannot create variable of ' + (type.isObject() && type.asObject().isAbstract() ? 'abstract ' : '') + type);
+  log.error(range, 'cannot create variable of ' + (type.isObject() && type.asObject().isAbstract ? 'abstract ' : '') + type);
 }
 
 function semanticErrorVariableNeedsValue(log: Log, range: SourceRange, type: WrappedType, isFinal: boolean) {
@@ -211,4 +211,8 @@ function semanticErrorImpliedMove(log: Log, range: SourceRange) {
 
 function semanticErrorAssigmentToFinal(log: Log, range: SourceRange) {
   log.error(range, 'cannot assign to final symbol');
+}
+
+function semanticErrorMustImplement(log: Log, range: SourceRange, name: string) {
+  log.error(range, 'must provide implementation for ' + name);
 }

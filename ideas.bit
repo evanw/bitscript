@@ -1,0 +1,48 @@
+// References are just automatically dereferenced pointers and are a syntactical convenience
+// "new" is called after the object is allocated
+// "delete" is called before the object is deallocated
+// "copy" is called on the copy after it is allocated and its fields are copied
+// "move" is called on the original after the copy is allocated and its fields are copied (not invoking the copy constructor)
+// If the copy constructor is abstract, the class can still be instantiated and moved but it cannot be copied
+// If the move destructor is abstract, the class can still be instantiated and copied but it cannot be moved
+
+class Owned<T> {
+  T* value;
+  new() : value(null) {
+  }
+  delete() {
+    delete value;
+  }
+  copy();
+  move() {
+    value = null;
+  }
+  static Owned<T> wrap(T* value) {
+    Owned<T> ptr;
+    ptr.value = value;
+    return move ptr; // The move keyword is required here (either that or the copy keyword)
+  }
+}
+
+class List<T> {
+  T[] values; // Note: not actual syntax but just using this as a placeholder for raw memory (List<T> will be a compiler intrinsic)
+  T& get(int index) { // Returning a reference here makes sense but it may prevent inlining Owned<T> for JavaScript because assigning to it needs to mutate ptr.value
+    return values[index];
+  }
+  void push(T value) {
+    values[values.length] = move value;
+  }
+  T pop() {
+    T value = move values[--values.length - 1];
+    values.length--; // Must shrink array after moving the value out or the value won't be there anymore
+    return move value; // The move keyword is required here (either that or the copy keyword)
+  }
+}
+
+class Foo {}
+
+List<int> ints;
+List<Foo> foos;
+List<Foo*> fooPtrs;
+List<Foo&> fooRefs;
+List<Owned<Foo>> fooUniques;

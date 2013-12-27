@@ -10,6 +10,14 @@ enum TypeModifier {
   INSTANCE = 4, // Is this an instance of the type instead of the type itself?
 }
 
+enum FunctionKind {
+  NORMAL = 1,
+  CONSTRUCTOR = 2, // Is this new()?
+  DESTRUCTOR = 4, // Is this delete()?
+  COPY_CONSTRUCTOR = 8, // Is this copy()?
+  MOVE_DESTRUCTOR = 16, // Is this move()?
+}
+
 class Type {
   parameters: TypeParameter[] = [];
 
@@ -73,17 +81,17 @@ class FunctionType extends Type {
 }
 
 class ObjectType extends Type {
-  lazyInitializer: () => void = null;
-  _constructorType: FunctionType = null;
+  constructorType: FunctionType = null;
   baseType: ObjectType = null;
-  vtableByteOffset: number = 0;
-  vtable: Symbol[] = [];
 
-  // Does some other object type have this as a base?
-  hasDerivedTypes: boolean = false;
+  // vtableByteOffset: number = 0;
+  // vtable: Symbol[] = [];
+
+  // Other object types that have this type as a base?
+  derivedTypes: ObjectType[] = [];
 
   // Does this object type have a (possibly inherited) function without a body?
-  _isAbstract: boolean = false;
+  isAbstract: boolean = false;
 
   // Is this object type allowed to be the base class of another object type?
   isSealed: boolean = false;
@@ -94,37 +102,13 @@ class ObjectType extends Type {
     super(0, 0);
   }
 
-  // Lazily compute the constructor type when it's needed instead of when the
-  // class is first initialized to get around tricky ordering problems:
-  //
-  //   class A { C c; }
-  //   class B : A {}
-  //   class C { B b; }
-  //
-  ensureIsInitialized() {
-    if (this.lazyInitializer !== null) {
-      this.lazyInitializer();
-      this.lazyInitializer = null;
-    }
-  }
-
-  isAbstract(): boolean {
-    this.ensureIsInitialized();
-    return this._isAbstract;
-  }
-
-  constructorType(): FunctionType {
-    this.ensureIsInitialized();
-    return this._constructorType;
-  }
-
   asString(): string {
     return this.name;
   }
 
-  needsVTable(): boolean {
-    return this.vtable.length !== 0;
-  }
+  // needsVTable(): boolean {
+  //   return this.vtable.length !== 0;
+  // }
 }
 
 class TypeParameter extends Type {
